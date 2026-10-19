@@ -73,9 +73,12 @@ export function MomentumChart({ series, goals, cards = [], codes, names, score, 
         })}
         {playhead !== null && onPick && (
           <g pointerEvents="none">
-            <line x1={edgeX(playhead)} x2={edgeX(playhead)} y1={22} y2={H - 26} style={{ stroke: "var(--minute)" }} strokeWidth={2} />
-            <rect x={edgeX(playhead) - 22} y={2} width={44} height={18} rx={9} style={{ fill: "var(--minute)" }} />
-            <text x={edgeX(playhead)} y={15} textAnchor="middle" fontSize={11} fontWeight={800} fill="#fff">{fmtMinute(playhead)}'</text>
+            {/* neutral on purpose: a halo plus a foreground-colour line reads on any team colour */}
+            <line x1={edgeX(playhead)} x2={edgeX(playhead)} y1={22} y2={H - 26} style={{ stroke: "var(--background)" }} strokeWidth={6} strokeOpacity={0.9} />
+            <line x1={edgeX(playhead)} x2={edgeX(playhead)} y1={22} y2={H - 26} style={{ stroke: "var(--foreground)" }} strokeWidth={2.5} />
+            <circle cx={edgeX(playhead)} cy={AXIS} r={5.5} style={{ fill: "var(--foreground)", stroke: "var(--background)" }} strokeWidth={2} />
+            <rect x={edgeX(playhead) - 24} y={2} width={48} height={19} rx={9.5} style={{ fill: "var(--foreground)", stroke: "var(--background)" }} strokeWidth={1.5} />
+            <text x={edgeX(playhead)} y={15.5} textAnchor="middle" fontSize={11} fontWeight={800} style={{ fill: "var(--background)" }}>{fmtMinute(playhead)}'</text>
           </g>
         )}
         <text x={PAD_L - 6} y={AXIS + 4} textAnchor="end" fontSize={10} className="fill-muted-foreground">0'</text>
