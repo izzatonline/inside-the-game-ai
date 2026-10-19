@@ -36,7 +36,7 @@ function Match({ cfg }: { cfg: Config }) {
   const [applied, setApplied] = useState(initial)
   const [runId, setRunId] = useState(0)
   const [open, setOpen] = useState(false)
-  const [layers, setLayers] = useState(["shape", "control", "roles", "trail"])
+  const [layers, setLayers] = useState(["shape", "control", "roles"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")

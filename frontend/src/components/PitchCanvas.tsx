@@ -76,6 +76,20 @@ export function PitchCanvas(props: Props) {
     }
 
 
+    // Ball path: separate arrows for the last touches, newest bright, oldest nearly gone
+    const arrow = (x0: number, y0: number, x1: number, y1: number, a: number) => {
+      const ang = Math.atan2(y1 - y0, x1 - x0), w = 1.4 + 2.2 * a, hs = 4 + 5 * a
+      g.strokeStyle = `rgba(255,255,255,${0.12 + 0.8 * a})`; g.fillStyle = g.strokeStyle; g.lineWidth = w; g.lineCap = "round"
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1 - Math.cos(ang) * hs * 0.6, y1 - Math.sin(ang) * hs * 0.6); g.stroke()
+      g.beginPath(); g.moveTo(x1, y1)
+      g.lineTo(x1 - hs * Math.cos(ang - 0.45), y1 - hs * Math.sin(ang - 0.45)); g.lineTo(x1 - hs * Math.cos(ang + 0.45), y1 - hs * Math.sin(ang + 0.45))
+      g.closePath(); g.fill()
+    }
+    const trailArrows = (tr: number[][], map: (p: number[]) => number[]) => {
+      const pts = tr.map(map)
+      for (let i = 1; i < pts.length; i++) arrow(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], i / (pts.length - 1))
+    }
+
     // ---------- 3D camera ----------
     const cam = { psi: 0, alpha: 0.8, dragged: false }
     const heads: number[][] = new Array(22).fill(0).map(() => [-99, -99, 0])
@@ -177,10 +191,7 @@ export function PitchCanvas(props: Props) {
           const h = hull(pts); if (h.length < 3) return
           poly(h.map((p) => project(p[0], p[1], 0.1, psi)), TEAM_COLORS[t] + "26", TEAM_COLORS[t] + "dd", 2)
         })
-        if (layers.includes("trail") && fr.trail.length > 1) {
-          g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 2
-          line3(fr.trail.map((p) => w3(p[0], p[1])), psi, 0.4)
-        }
+        if (layers.includes("trail") && fr.trail.length > 1) trailArrows(fr.trail, (p) => { const w = w3(p[0], p[1]); return project(w[0], w[1], 0.4, psi) })
         // players, far to near
         type T = { t: number; n: number; gp: number[] }
         const list: T[] = []
@@ -251,10 +262,7 @@ export function PitchCanvas(props: Props) {
           g.beginPath(); h.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath()
           g.fillStyle = TEAM_COLORS[t] + "1f"; g.fill(); g.strokeStyle = TEAM_COLORS[t] + "cc"; g.lineWidth = 1.6; g.lineJoin = "round"; g.stroke()
         })
-        if (layers.includes("trail") && fr.trail.length > 1) {
-          g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 2; g.beginPath()
-          fr.trail.forEach((p, i) => (i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])))); g.stroke()
-        }
+        if (layers.includes("trail") && fr.trail.length > 1) trailArrows(fr.trail, (p) => [X(p[0]), Y(p[1])])
         const r = Math.max(6, Math.min(11, W * 0.018))
         for (let t = 0; t < 2; t++) for (let n = 0; n < 11; n++) {
           const x = X(cur[t * 11 + n][0]), y = Y(cur[t * 11 + n][1]), sel = selected && selected.team === t && selected.idx === n

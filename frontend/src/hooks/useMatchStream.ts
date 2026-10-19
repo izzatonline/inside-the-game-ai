@@ -27,7 +27,11 @@ export function useMatchStream(settings: Settings, runId: number) {
       const f = JSON.parse((e as MessageEvent).data) as { pos: number[][]; ball: number[] }
       const fr = frames.current
       fr.target = f.pos; fr.ball = f.ball
-      if (fr.n++ % 2 === 0) { fr.trail.push(f.ball.slice()); if (fr.trail.length > 14) fr.trail.shift() }
+      fr.n++
+      const last = fr.trail[fr.trail.length - 1]
+      if (!last || Math.hypot((f.ball[0] - last[0]) * 1.05, (f.ball[1] - last[1]) * 0.68) > 4) {
+        fr.trail.push(f.ball.slice()); if (fr.trail.length > 5) fr.trail.shift()  // last 4 touches
+      }
     })
     es.addEventListener("stats", (e) => setStats(JSON.parse((e as MessageEvent).data)))
     es.addEventListener("tactics", (e) => { setTactics(JSON.parse((e as MessageEvent).data)); setStatus("AI shape analysis live") })
