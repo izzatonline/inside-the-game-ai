@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, Box, ChevronUp, Settings2 } from "lucide-react"
+import { Activity, Box, ChevronDown, ChevronUp, Settings2 } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
@@ -9,7 +9,7 @@ import { TacticsPanel } from "@/components/TacticsPanel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -26,23 +26,16 @@ const initial: Settings = {
   metric: params.get("metric") ?? "", src: params.get("src") ?? "stream", speed: params.get("speed") ?? "60", seed: params.get("seed") ?? "7",
 }
 
-/** Phones only: 0 at the top of the page, 1 once scrolled past `distance` px (smoothstep-eased). */
-function useScrollCollapse(distance: number) {
-  const [p, setP] = useState(0)
+/** True below the lg breakpoint (phones and small tablets), where the pitch can be folded away. */
+function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 1023px)").matches)
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)")
-    const onMq = () => setMobile(mq.matches)
-    mq.addEventListener("change", onMq)
-    let raf = 0
-    const onScroll = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => { const x = Math.min(1, Math.max(0, window.scrollY / distance)); setP(x * x * (3 - 2 * x)) })
-    }
-    window.addEventListener("scroll", onScroll, { passive: true }); onScroll()
-    return () => { mq.removeEventListener("change", onMq); window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf) }
-  }, [distance])
-  return { p: mobile ? p : 0, mobile }
+    const on = () => setMobile(mq.matches)
+    mq.addEventListener("change", on)
+    return () => mq.removeEventListener("change", on)
+  }, [])
+  return mobile
 }
 
 export default function App() {
@@ -65,7 +58,10 @@ function Match({ cfg }: { cfg: Config }) {
   const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals } = useMatchStream(applied, runId)
   const info = ball ? describeBall(ball, cfg, codes) : null
   const narrow = useMemo(() => window.innerWidth < 480, [])
-  const { p: collapse, mobile } = useScrollCollapse(260)
+  const mobile = useIsMobile()
+  const [momentumOpen, setMomentumOpen] = useState(false)
+  const [pitchHidden, setPitchHidden] = useState(false)
+  const hidePitch = mobile && pitchHidden
   const pitchBox = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {  // tab bar sticks right below the (variable-height) pinned header
@@ -111,28 +107,25 @@ function Match({ cfg }: { cfg: Config }) {
   )
 
   return (
-    <div style={mobile ? { minHeight: "calc(100dvh + 300px)" } : undefined} className="mx-auto grid max-w-[1180px] [overflow-anchor:none] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
+    <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
       <div ref={headerRef} className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
-          <Popover>
-            <PopoverTrigger render={<Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" aria-label="Show match momentum" />}>
+          <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
             <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-400">{stats?.minute ?? 0}'<Activity className="text-muted-foreground size-3" /></div></div>
             <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
-            </PopoverTrigger>
-            <PopoverContent side="bottom" align="center" sideOffset={8} className="w-[min(94vw,40rem)]">
-              <MomentumChart series={series} goals={goals} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
-                score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
-            </PopoverContent>
-          </Popover>
-          {mobile && collapse > 0.9 && <Button variant="outline" size="icon-lg" aria-label="Show pitch" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><ChevronUp /></Button>}
+            </Card>
+          {mobile && <Button variant="outline" size="icon-lg" aria-label={pitchHidden ? "Show pitch" : "Hide pitch"} aria-expanded={!pitchHidden} onClick={() => setPitchHidden((h) => !h)}>{pitchHidden ? <ChevronDown /> : <ChevronUp />}</Button>}
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         <div ref={pitchBox} className="border-border relative overflow-hidden rounded-2xl border shadow-2xl will-change-[opacity,max-height]"
-          style={mobile && pitchH ? { opacity: 1 - collapse, maxHeight: `${pitchH * (1 - collapse)}px`, visibility: collapse > 0.98 ? "hidden" : "visible" } : undefined}>
+          style={mobile && pitchH ? {
+            opacity: hidePitch ? 0 : 1, maxHeight: hidePitch ? 0 : pitchH, visibility: hidePitch ? "hidden" : "visible",
+            transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
+          } : undefined}>
           <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => cfg.teams[c].players)} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
@@ -153,7 +146,7 @@ function Match({ cfg }: { cfg: Config }) {
         <div className="mb-3 lg:hidden">{controls}</div>
         <Tabs defaultValue="moments">
           <div className="bg-background sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
-            <TabsList className="w-full"><TabsTrigger value="moments">Moments</TabsTrigger><TabsTrigger value="tactics">Tactics</TabsTrigger><TabsTrigger value="stats">Stats</TabsTrigger></TabsList>
+            <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger></TabsList>
           </div>
           <TabsContent value="moments" className="space-y-2">
             {recap && <Card size="sm" className="bg-emerald-500/10"><CardContent><h3 className="font-semibold">{recap.headline}</h3><p className="text-sm">{recap.body}</p><span className="text-muted-foreground text-[11px]">{recap.source === "llm" ? "AI-written recap" : "rules-based recap"}</span></CardContent></Card>}
@@ -166,6 +159,13 @@ function Match({ cfg }: { cfg: Config }) {
           <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} /></TabsContent>
         </Tabs>
       </div>
+      <Dialog open={momentumOpen} onOpenChange={setMomentumOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Match momentum</DialogTitle><DialogDescription>Who was on top, minute by minute.</DialogDescription></DialogHeader>
+          <MomentumChart series={series} goals={goals} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
+            score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
+        </DialogContent>
+      </Dialog>
       <SettingsSheet open={open} onOpenChange={setOpen} cfg={cfg} value={draft} onChange={setDraft} onApply={apply} />
     </div>
   )
