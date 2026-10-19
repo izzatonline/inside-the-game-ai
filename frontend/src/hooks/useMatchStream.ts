@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { BallInfo, Band } from "@/lib/ball"
 import type { BenchState, Config, Frames, Overlay, Recap, Settings, Stats, SubLog, TacticsMap } from "@/lib/types"
 
@@ -18,6 +18,9 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [recap, setRecap] = useState<Recap | null>(null)
   const [status, setStatus] = useState("Connecting…")
+  const [paused, setPaused] = useState(false)
+  const esRef = useRef<EventSource | null>(null)
+  const pause = useCallback(() => { esRef.current?.close(); setPaused(true); setStatus("Paused") }, [])
   const [toast, setToast] = useState<Toast | null>(null)
   const [ball, setBall] = useState<BallInfo | null>(null)
   const [series, setSeries] = useState<{ minute: number; value: number }[]>([])
@@ -30,10 +33,11 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
   useEffect(() => {
     const s = latest.current
     frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null }
-    setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null)
+    setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null); setPaused(false)
     const player = s.player.split(":")[2] ?? ""
     const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric })
     const es = new EventSource(`/api/${s.src}?${q}`)
+    esRef.current = es
     let toastId = 0
     let live = latestStart.current <= 0  // no toasts while the catch-up burst replays earlier moments
     let lastKey = ""
@@ -103,5 +107,5 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
     return () => clearTimeout(t)
   }, [toast])
 
-  return { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster }
+  return { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster, paused, pause }
 }

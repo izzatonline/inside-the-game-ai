@@ -275,3 +275,26 @@ def test_stream_start_minute_catches_up_and_ends_the_same():
     assert '"kind": "goal"' in history and "event: bench" in history  # early goals and subs come in the burst
     assert part.count("event: frame") < 0.5 * full.count("event: frame")  # frames before the jump are skipped
     assert part.split("event: recap")[1] == full.split("event: recap")[1]  # same final result either way
+
+
+def test_match_report_is_built_from_events():
+    from itg.generator import MATCHES
+
+    for mid, home_dominant in (("riverside", True), ("coastal", None)):
+        spec = MATCHES[mid]
+        names = {c: v["name"] for c, v in spec.teams.items()}
+        rosters = {c: [n for n, _ in v["players"]] for c, v in spec.teams.items()}
+        pipe = MatchPipeline(names, OfflineLLM(), rosters=rosters)
+        for e in generate_match(3, match=mid):
+            pipe.process(e, Profile())
+        rep = pipe.recap(Profile())["report"]
+        heat = rep["heat"]
+        assert len(heat["v"]) == heat["rows"] and len(heat["v"][0]) == heat["cols"]
+        assert all(-1 <= x <= 1 for row in heat["v"] for x in row) and all(0 <= x <= 1 for row in heat["w"] for x in row)
+        assert sum(rep["tilt"].values()) == 100
+        assert [m["key"] for m in rep["metrics"]] == ["start", "prog", "circ", "build", "fast", "press"]
+        if home_dominant:  # the dominant side owns the final third and builds patiently
+            first = list(rep["tilt"])[0]
+            assert rep["tilt"][first] > 70
+            build = next(m for m in rep["metrics"] if m["key"] == "build")
+            assert build["home"] > build["away"]

@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, Box, ChevronDown, ChevronUp, Info, Moon, PanelLeft, Settings2, Sun } from "lucide-react"
+import { Activity, ArrowUp, Box, ChevronDown, ChevronRight, ChevronUp, Info, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { RolesLegend } from "@/components/RolesLegend"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
-import { TimeScrubber } from "@/components/TimeScrubber"
 import { StatsPanel } from "@/components/StatsPanel"
 import { LineupsPanel } from "@/components/LineupsPanel"
 import { RecapCard } from "@/components/RecapCard"
@@ -64,26 +63,25 @@ export default function App() {
     <SidebarProvider>
       <AppSidebar matches={matches} matchId={matchId} onSelect={setMatchId} theme={theme.mode} onTheme={theme.setMode} />
       <SidebarInset className="bg-transparent">
-        <Match key={matchId} cfg={cfg} matchId={matchId} theme={theme} />
+        <Match key={matchId} cfg={cfg} matchId={matchId} theme={theme} next={matches.length > 1 ? matches[(matches.findIndex((m) => m.id === matchId) + 1) % matches.length] : null} onNext={() => setMatchId(matches[(matches.findIndex((m) => m.id === matchId) + 1) % matches.length].id)} />
       </SidebarInset>
     </SidebarProvider>
   )
 }
 
-function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: ReturnType<typeof useTheme> }) {
+function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: string; theme: ReturnType<typeof useTheme>; next: MatchInfo | null; onNext: () => void }) {
   const codes = Object.keys(cfg.teams)
   const [draft, setDraft] = useState(initial)
   const [applied, setApplied] = useState(initial)
   const [runId, setRunId] = useState(0)
   const [startMin, setStartMin] = useState(0)
-  const [scrub, setScrub] = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const [showEnd, setShowEnd] = useState(false)
   const [open, setOpen] = useState(false)
   const [layers, setLayers] = useState(["shape", "control", "roles"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")
-  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream({ ...applied, match: matchId }, runId, cfg, startMin)
+  const { frames, stats, tactics, overlays, recap, toast, ball, series, goals, cards, subLog, bench, roster, paused, pause } = useMatchStream({ ...applied, match: matchId }, runId, cfg, startMin)
   const { toggleSidebar } = useSidebar()
   const [benchSel, setBenchSel] = useState<BenchPick>(null)
   const info = ball ? describeBall(ball, cfg, codes) : null
@@ -91,6 +89,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const mobile = useIsMobile()
   const { mode: themeMode, setMode: setThemeMode, dark } = theme
   const [momentumOpen, setMomentumOpen] = useState(false)
+  const [tab, setTab] = useState("moments")
   const [legendOpen, setLegendOpen] = useState(false)
   const [jump, setJump] = useState(0)
   const [hint, setHint] = useState(() => { try { return !localStorage.getItem("itg-hint-seen") } catch { return false } })
@@ -119,11 +118,21 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
     setSelected(c ? { team: codes.indexOf(c), idx: Number(i) } : null)
     setApplied(draft); setStartMin(0); setRunId((n) => n + 1); setOpen(false)
   }
-  const sel = selected ? { name: (roster[codes[selected.team]] ?? cfg.teams[codes[selected.team]].players)[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
+  const sel = selected ? { sub: subLog.find((x) => x.team === codes[selected.team] && x.slot === selected.idx && x.player_in === (roster[codes[selected.team]] ?? [])[selected.idx]), name: (roster[codes[selected.team]] ?? cfg.teams[codes[selected.team]].players)[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
   const shape = codes.map((c, i) => ({ c, i, p: tactics[c] })).filter((x) => x.p)
 
   const nowMin = Math.floor((stats?.t ?? startMin * 60) / 60)
   const canJump = applied.src !== "live"
+  const state: "playing" | "paused" | "ended" = recap ? "ended" : paused ? "paused" : "playing"
+  const resumeFrom = (min: number) => { setStartMin(min); setRunId((n) => n + 1); setSelected(null); setBenchSel(null); setShowEnd(false) }
+  const togglePlay = () => { if (state === "playing") pause(); else if (state === "paused") resumeFrom((stats?.t ?? 0) / 60); else resumeFrom(0) }
+  const SPEEDS = ["30", "60", "120", "300"]
+  const cycleSpeed = () => {
+    const nextSpeed = SPEEDS[(SPEEDS.indexOf(applied.speed) + 1) % SPEEDS.length] ?? "60"
+    setApplied({ ...applied, speed: nextSpeed }); setDraft((d) => ({ ...d, speed: nextSpeed }))
+    resumeFrom(state === "ended" ? 0 : (stats?.t ?? 0) / 60)
+  }
+  useEffect(() => { if (recap) setShowEnd(true) }, [recap])
   const dismissHint = () => { setHint(false); try { localStorage.setItem("itg-hint-seen", "1") } catch { /* private mode */ } }
   const openTimeline = () => { setJump(nowMin); setMomentumOpen(true); dismissHint() }
   const doJump = (m: number) => { setStartMin(m); setRunId((n) => n + 1); setSelected(null); setBenchSel(null); setMomentumOpen(false) }
@@ -132,6 +141,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const controls = (
     <>
 <div className="mt-2 flex max-w-full items-center gap-3 overflow-x-auto pb-1">
+          <Button variant="outline" size="sm" onClick={cycleSpeed} aria-label="Change playback speed" title="Change playback speed" className="tabular-nums">{applied.speed}×</Button>
           <Toggle pressed={view3d} onPressedChange={setView3d} variant="outline" size="sm" aria-label="3D view"><Box /> 3D</Toggle>
           <ToggleGroup multiple value={layers} onValueChange={setLayers} variant="outline" size="sm" spacing={1}>
             <ToggleGroupItem value="shape">Team shape</ToggleGroupItem><ToggleGroupItem value="control">Territory</ToggleGroupItem>
@@ -151,31 +161,29 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   return (
     <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100%_-_440px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
       <div ref={headerRef} className="bg-background/85 sticky top-0 z-30 min-w-0 border-b backdrop-blur-md px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
-        <div className="relative" onPointerEnter={(e) => { if (e.pointerType === "mouse" && applied.src !== "live") setScrub(true) }}
-          onPointerLeave={(e) => { if (e.pointerType === "mouse" && !dragging) setScrub(false) }}>
+        <div className="relative">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={openTimeline} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openTimeline() }}>
-              <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
-            <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
+              <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-4">
+            <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
+            <div className="px-1.5 text-center sm:px-3"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
+            <div className="flex min-w-0 items-center justify-end gap-1.5 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
             </Card>
+          <Button variant={state === "ended" ? "default" : "outline"} size="icon-lg" aria-label={state === "playing" ? "Pause match" : state === "paused" ? "Resume match" : "Replay match"} title={state === "playing" ? "Pause" : state === "paused" ? "Resume" : "Replay from kick-off"} onClick={togglePlay}>{state === "playing" ? <Pause /> : state === "paused" ? <Play /> : <RotateCcw />}</Button>
           {mobile && <Button variant="outline" size="icon-lg" aria-label={pitchHidden ? "Show pitch" : "Hide pitch"} aria-expanded={!pitchHidden} onClick={() => setPitchHidden((h) => !h)}>{pitchHidden ? <ChevronDown /> : <ChevronUp />}</Button>}
           <Button variant="outline" size="icon-lg" aria-label="Toggle light or dark mode" className="hidden sm:inline-flex" onClick={() => setThemeMode(dark ? "light" : "dark")}>{dark ? <Sun /> : <Moon />}</Button>
-          <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
+          <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><SettingsIcon /></Button>
         </div>
-        <div className="-mb-1 cursor-pointer py-2" onClick={() => setScrub((o) => !o)} title="Jump to a minute">
+        <div className="my-2">
           <div className="h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         </div>
-        {hint && canJump && !scrub && (
+        {hint && canJump && (
           <button onClick={dismissHint} className="bg-foreground text-background animate-in fade-in slide-in-from-top-1 absolute top-full left-1/2 z-40 mt-0.5 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-medium whitespace-nowrap shadow-lg">
             Tip: tap the score to jump to any minute ✕
           </button>
         )}
-        {applied.src !== "live" && <TimeScrubber open={scrub} value={Math.floor((stats?.t ?? startMin * 60) / 60)} max={cfg.match.duration_min}
-          onDragging={setDragging} onCommit={(m) => { setStartMin(m); setRunId((n) => n + 1); setSelected(null); setBenchSel(null) }} />}
       </div>
         <div ref={pitchBox} className="border-border relative overflow-hidden rounded-2xl border shadow-2xl will-change-[opacity,max-height]"
           style={mobile && pitchH ? {
@@ -183,10 +191,24 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
             transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
           } : undefined}>
           <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
-          <Badge variant="secondary" className="absolute top-2 right-2 hidden sm:inline-flex">{status}</Badge>
+          <Badge variant="secondary" className="absolute top-2 right-2 hidden sm:inline-flex">{state === "ended" ? "Full time" : state === "paused" ? "Paused" : `Playing · ${applied.speed}×`}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur sm:top-9">Drag to rotate · double-tap to reset</Badge>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
             <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
+          {recap && showEnd && (
+            <div className="bg-background/55 absolute inset-0 z-20 grid place-items-center backdrop-blur-[2px]">
+              <div className="bg-background/95 w-[min(88%,22rem)] space-y-3 rounded-2xl border p-4 text-center shadow-xl">
+                <div className="text-muted-foreground text-[11px] font-semibold tracking-[0.2em] uppercase">Full time</div>
+                <div className="text-3xl font-black tabular-nums">{stats?.teams[codes[0]].goals ?? 0} - {stats?.teams[codes[1]].goals ?? 0}</div>
+                <div className="grid gap-2">
+                  <Button onClick={() => resumeFrom(0)}><RotateCcw /> Replay match</Button>
+                  {next && <Button variant="outline" onClick={onNext}>Next: {next.title} <ChevronRight /></Button>}
+                  <Button variant="ghost" onClick={() => { setTab("stats"); setPitchHidden(true); setShowEnd(false) }}>See the match report</Button>
+                </div>
+                <button className="text-muted-foreground text-xs underline" onClick={() => setShowEnd(false)}>Close and look at the pitch</button>
+              </div>
+            </div>
+          )}
           <div className="pointer-events-none absolute top-2 left-2 z-10 flex max-w-[64%] flex-col items-start gap-1.5 [&>*]:pointer-events-auto">
           {info && <div className="bg-background/85 flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs backdrop-blur" aria-live="polite">
             <span className={`size-2 shrink-0 rounded-full ${info.band === 0 ? "animate-pulse" : ""}`} style={{ background: TEAM_COLORS[info.teamIdx] }} />
@@ -196,7 +218,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           {benchSel && !sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
             <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-(--minute)">{benchSel.role}</div></div>}
           {sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
-            <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
+            <b>{sel.name}</b> · {sel.team}{sel.sub && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"><ArrowUp className="size-3" />sub {fmtMinute(sel.sub.minute)}'</span>}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
           </div>
         </div>
         <div className="hidden lg:block">{controls}</div>
@@ -209,12 +231,12 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
         }}>
           <div className="min-h-0 overflow-hidden"><div className="pb-3">{controls}</div></div>
         </div>
-        <Tabs defaultValue="moments">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as string)}>
           <div className="bg-background/85 backdrop-blur-md sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
             <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger><TabsTrigger value="lineups" onClick={() => setPitchHidden(true)}>Line-ups</TabsTrigger></TabsList>
           </div>
           <TabsContent value="moments" className="space-y-2">
-            {recap && <RecapCard recap={recap} codes={codes} />}
+            {recap && <RecapCard recap={recap} codes={codes} onReport={() => { setTab("stats"); setPitchHidden(true) }} />}
             {overlays.length === 0 && <p className="text-muted-foreground py-6 text-center text-sm">Waiting for the first key moment…</p>}
             <ol className="relative before:absolute before:top-2 before:bottom-0 before:left-[58px] before:w-px before:bg-border">
               {overlays.map((o) => <MomentCard key={o.moment_id} o={o} awayCode={codes[1]} />)}
@@ -222,8 +244,8 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
             {overlays[0] && <details className="text-muted-foreground text-sm"><summary className="cursor-pointer">Machine-readable overlay (latest)</summary>
               <ScrollArea className="bg-muted mt-2 h-48 rounded-lg"><pre className="p-3 text-[11.5px]">{JSON.stringify(overlays[0], null, 2)}</pre></ScrollArea></details>}
           </TabsContent>
-          <TabsContent value="tactics"><TacticsPanel tactics={tactics} codes={codes} selected={selected} onSelect={setSelected} /></TabsContent>
-          <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} /></TabsContent>
+          <TabsContent value="tactics"><TacticsPanel tactics={tactics} codes={codes} selected={selected} onSelect={setSelected} subLog={subLog} /></TabsContent>
+          <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} recap={recap} /></TabsContent>
           <TabsContent value="lineups"><LineupsPanel cfg={cfg} codes={codes} tactics={tactics} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
         </Tabs>
       </div>

@@ -20,9 +20,14 @@ export type Stats = { t: number; minute: number; momentum: number; teams: Record
 export type GoalLog = { minute: number; team: string; player: string; score_home: number; score_away: number; og?: boolean }
 export type CardLog = { minute: number; team: string; player: string; card: string }
 export type SubLog = { minute: number; team: string; slot: number; player_in: string; player_out: string; number: number }
+export type Report = {
+  heat: { cols: number; rows: number; v: number[][]; w: number[][] }
+  tilt: Record<string, number>
+  metrics: { key: string; label: string; unit: string; home: number; away: number }[]
+}
 export type Recap = {
   headline: string; body: string; source: string; stats: Record<string, TeamStats>; home: string; away: string
-  goals: GoalLog[]; cards: CardLog[]; subs: SubLog[]; key_moments: { minute: number; kind: string; headline: string; team: string }[]
+  report: Report; goals: GoalLog[]; cards: CardLog[]; subs: SubLog[]; key_moments: { minute: number; kind: string; headline: string; team: string }[]
 }
 export type Staff = { coach: string; assistants: string[]; subs: { name: string; pos: string; number: number }[] }
 export type BenchState = Record<string, { warming: number[]; used: number[] }>

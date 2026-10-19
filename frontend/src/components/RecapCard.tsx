@@ -1,6 +1,7 @@
 import { fmtMinute } from "@/lib/format"
 import { Goal, ShieldCheck, TriangleAlert, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { TEAM_COLORS } from "@/lib/theme"
 import type { Recap } from "@/lib/types"
@@ -20,7 +21,7 @@ function Compare({ label, h, a, dec = 0 }: { label: string; h: number; a: number
 }
 
 /** Full-time summary: result first, one plain sentence, the three numbers that matter, then the goals. */
-export function RecapCard({ recap, codes }: { recap: Recap; codes: string[] }) {
+export function RecapCard({ recap, codes, onReport }: { recap: Recap; codes: string[]; onReport?: () => void }) {
   const [h, a] = codes
   const sh = recap.stats[h], sa = recap.stats[a]
   const yellows = recap.cards.length, subs = recap.subs.length
@@ -61,6 +62,7 @@ export function RecapCard({ recap, codes }: { recap: Recap; codes: string[] }) {
           <span className="flex items-center gap-1"><TriangleAlert className="size-3.5 text-yellow-500" />{yellows} yellow card{yellows === 1 ? "" : "s"}</span>
           <span className="flex items-center gap-1"><Users className="size-3.5" />{subs} substitution{subs === 1 ? "" : "s"}</span>
         </div>
+        {onReport && <Button variant="outline" className="w-full" onClick={onReport}>See the full match report →</Button>}
       </CardContent>
     </Card>
   )

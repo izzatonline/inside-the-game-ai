@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from .models import Event, Moment
+from .report import MatchReportBuilder
 from .tactics import TacticsAnalyzer
 
 def minute_label(m: int) -> str:
@@ -70,6 +71,7 @@ class MatchState:
         self.dominant: Optional[str] = None
         self._cooldown: Dict[str, float] = {}
         self._n = 0
+        self.report_builder = MatchReportBuilder(self.codes)
         self.goal_log: List[Dict[str, Any]] = []
         self.card_log: List[Dict[str, Any]] = []
         self.sub_log: List[Dict[str, Any]] = []
@@ -128,6 +130,7 @@ class MatchState:
             return [self._moment(ev, d["kind"], d["importance"], d["player"], d["team"], **d["facts"])
                     for d in self.tactics.pop_moments()]
         self.tactics.observe(ev)
+        self.report_builder.observe(ev)
         if ev.type == "warmup":
             return out
         if ev.type in ("restart", "foul", "card", "offside"):
@@ -294,6 +297,9 @@ class MatchState:
         return out
 
     # ---- read models ---------------------------------------------------
+    def report(self):
+        return self.report_builder.build()
+
     def snapshot(self) -> Dict[str, Any]:
         total_actions = sum(t.actions for t in self.teams.values()) or 1
         return {

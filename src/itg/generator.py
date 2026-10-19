@@ -518,7 +518,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             receiver = pick(poss, nx)
             ok = rng.random() < p_ok
             emit(t, "pass", poss, passer, x, y, "complete" if ok else "incomplete",
-                 receiver=receiver, distance_m=round(dist, 1), difficulty=round(difficulty, 2),
+                 receiver=receiver, distance_m=round(dist, 1), difficulty=round(difficulty, 2), ex=round(nx, 1), ey=round(ny, 1),
                  speed_kmh=round(rng.uniform(35, 75) if dist > 20 else rng.uniform(20, 45), 0))
             if ok:
                 x, y = nx, ny

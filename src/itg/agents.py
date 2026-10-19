@@ -183,7 +183,7 @@ class RecapAgent:
             text, source = self._narrative(facts, p.lang), "template"
         return {
             "headline": _fmt(RECAP.get(p.lang, RECAP["en"])[0], facts), "body": text, "source": source,
-            "stats": snap, "home": h, "away": a, "goals": goals, "cards": state.card_log, "subs": state.sub_log,
+            "stats": snap, "home": h, "away": a, "goals": goals, "report": state.report(), "cards": state.card_log, "subs": state.sub_log,
             "key_moments": [{"minute": m.minute, "kind": m.kind, "headline": o.headline, "team": m.team} for m, o in top],
         }
 

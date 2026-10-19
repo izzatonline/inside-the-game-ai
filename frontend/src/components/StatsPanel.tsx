@@ -1,5 +1,6 @@
+import { MatchReport, MatchReportPlaceholder } from "@/components/MatchReport"
 import { TEAM_COLORS } from "@/lib/theme"
-import type { Stats, TeamStats } from "@/lib/types"
+import type { Recap, Stats, TeamStats } from "@/lib/types"
 
 type Row = [label: string, key: keyof TeamStats, decimals?: number, lowerIsBetter?: boolean]
 const GROUPS: [string, Row[]][] = [
@@ -43,11 +44,12 @@ export function TeamStatsTable({ teams, codes }: { teams: Record<string, TeamSta
   )
 }
 
-export function StatsPanel({ stats, codes }: { stats: Stats | null; codes: string[] }) {
+export function StatsPanel({ stats, codes, recap }: { stats: Stats | null; codes: string[]; recap: Recap | null }) {
   if (!stats) return <p className="text-muted-foreground py-6 text-center text-sm">Waiting for kick-off…</p>
   return (
-    <div>
-      <div className="mb-3 grid grid-cols-2 text-sm font-semibold">
+    <div className="space-y-5">
+      {recap ? <MatchReport recap={recap} codes={codes} /> : <MatchReportPlaceholder />}
+      <div className="grid grid-cols-2 text-sm font-semibold">
         <span style={{ color: "var(--team-0)" }}>{stats.teams[codes[0]].name}</span>
         <span className="text-right" style={{ color: "var(--team-1)" }}>{stats.teams[codes[1]].name}</span>
       </div>

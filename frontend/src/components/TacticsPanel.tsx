@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react"
+import { ArrowUp } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { fmtMinute } from "@/lib/format"
 import { BADGE_COLORS, TEAM_COLORS } from "@/lib/theme"
-import type { Selected, TacticsMap } from "@/lib/types"
+import type { Selected, SubLog, TacticsMap } from "@/lib/types"
 
 function Meter({ label, value, max, text, color, hint }: { label: string; value: number; max: number; text: string; color: string; hint?: string }) {
   return (
@@ -22,7 +24,7 @@ function Meter({ label, value, max, text, color, hint }: { label: string; value:
 
 const shortName = (full: string) => { const p = full.split(" "); return p.length > 1 ? `${p[0][0]}. ${p.slice(1).join(" ")}` : full }
 
-export function TacticsPanel({ tactics, codes, selected, onSelect }: { tactics: TacticsMap; codes: string[]; selected: Selected; onSelect: (s: Selected) => void }) {
+export function TacticsPanel({ tactics, codes, selected, onSelect, subLog }: { tactics: TacticsMap; codes: string[]; selected: Selected; onSelect: (s: Selected) => void; subLog: SubLog[] }) {
   const [open, setOpen] = useState<string[]>([codes[0]])
   // tapping a player on the pitch opens that player's team
   useEffect(() => { if (selected) setOpen([codes[selected.team]]) }, [selected, codes])
@@ -71,11 +73,13 @@ export function TacticsPanel({ tactics, codes, selected, onSelect }: { tactics: 
                 <div className="grid grid-cols-2 gap-1">
                   {p.roles.map((r) => {
                     const sel = selected?.team === i && selected.idx === r.idx
+                    const sub = subLog.find((x) => x.team === c && x.slot === r.idx && x.player_in === r.name)
                     return (
                       <button key={r.idx} title={`${r.name} · ${r.role}`} onClick={() => onSelect({ team: i, idx: r.idx })}
-                        className={`bg-muted/50 hover:bg-muted flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left ${sel ? "ring-2 ring-amber-400" : ""}`}>
+                        className={`bg-muted/50 hover:bg-muted flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left ${sel ? "ring-2 ring-inset ring-amber-400" : ""}`}>
                         <span className="min-w-8 shrink-0 rounded px-1 text-center text-[10px] font-extrabold text-black" style={{ background: BADGE_COLORS[r.short] ?? "#cbd5e1" }}>{r.short}</span>
                         <span className="min-w-0 leading-tight"><span className="block truncate text-[13px]">{shortName(r.name)}</span><span className="text-muted-foreground block truncate text-[10px]">{r.role}</span></span>
+                        {sub && <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400" title={`Substitute: came on ${fmtMinute(sub.minute)}' for ${sub.player_out}`}><ArrowUp className="size-3" />{fmtMinute(sub.minute)}'</span>}
                       </button>
                     )
                   })}
