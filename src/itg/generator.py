@@ -9,7 +9,7 @@ import itertools
 import json
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from .models import Event
@@ -80,6 +80,7 @@ class MatchSpec:
     teams: Dict[str, Dict]
     duration: float = 5400.0
     scenario: Optional[Dict[str, Any]] = None
+    referee: Dict[str, Any] = field(default_factory=lambda: {"name": "Sam Whitlock", "assistants": ["Pia Norland", "Gus Ferreira"], "var": "Lena Okonkwo"})
 
 
 MATCHES: Dict[str, MatchSpec] = {}
@@ -144,6 +145,7 @@ _M = 60.0
 MATCHES["riverside"] = MatchSpec(
     "riverside", "Riverside Cup Tie", "Riverside Arena · 90+9", "Total control, a VAR drama and a late penalty",
     _RIVERSIDE_TEAMS, duration=99 * _M,
+    referee={"name": "Marta Quill", "assistants": ["Owen Harlan", "Dev Rao"], "var": "Jon Ashby"},
     scenario={
         "strength": {"MER": 1.5, "TID": 0.78},
         "shot_rate": 0.03,
@@ -222,6 +224,7 @@ _REDCREST_TEAMS: Dict[str, Dict] = {
 MATCHES["redcrest"] = MatchSpec(
     "redcrest", "Redcrest Rain Night", "Redcrest Park · 90+9", "An early shock, a fightback and a goal flurry",
     _REDCREST_TEAMS, duration=99 * _M,
+    referee={"name": "Tobias Renner", "assistants": ["Yara Lindgren", "Cal Brennan"], "var": "Ines Duarte"},
     scenario={
         "strength": {"RED": 1.22, "KES": 0.92},
         "shot_rate": 0.05,

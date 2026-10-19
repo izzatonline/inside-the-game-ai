@@ -104,6 +104,16 @@ export function LineupsPanel({ cfg, codes, subLog, cards, goals }: Props) {
           ))}
         </div>
       </Section>
+      <Section title="Match officials">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+          {[["R", cfg.referee.name, "Referee"], ["V", cfg.referee.var, "VAR"], ...cfg.referee.assistants.map((a, k) => [`A${k + 1}`, a, `Assistant ${k + 1}`])].map(([b, n, r]) => (
+            <div key={r} className="flex min-w-0 items-center gap-2">
+              <span className="bg-foreground text-background grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold">{b}</span>
+              <span className="min-w-0 leading-tight"><span className="block truncate text-[13px] font-semibold">{n}</span><span className="text-muted-foreground block text-[11px]">{r}</span></span>
+            </div>
+          ))}
+        </div>
+      </Section>
       <Section title="Coaches">
         <div className="grid grid-cols-2 gap-x-4">
           {codes.map((c, t) => {

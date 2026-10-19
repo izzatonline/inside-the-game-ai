@@ -35,6 +35,7 @@ export type BenchPick = { team: number; name: string; role: string } | null
 export type Config = {
   llm: string; orchestration: string; languages: Record<string, string>; match: { id: string; title: string; subtitle: string; duration_min: number }
   teams: Record<string, { name: string; players: string[]; slots: number[][]; formation: string; lines: number[][]; staff: Staff }>
+  referee: { name: string; assistants: string[]; var: string }
 }
 export type MatchInfo = { id: string; title: string; subtitle: string; blurb: string; duration_min: number; scripted: boolean; teams: { code: string; name: string }[] }
 export type Settings = {

@@ -113,7 +113,7 @@ def config(match: str = DEFAULT_MATCH):
         "languages": LANGUAGES,
         "match": {"id": _spec(match).id, "title": _spec(match).title, "subtitle": _spec(match).subtitle,
                   "duration_min": round(_spec(match).duration / 60)},
-        "teams": _roster(_spec(match)),
+        "teams": _roster(_spec(match)), "referee": _spec(match).referee,
     }
 
 
