@@ -155,19 +155,21 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
             transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
           } : undefined}>
           <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
-          <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
-          {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
-          {info && <div className="bg-background/85 absolute bottom-2 left-2 flex max-w-[75%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs backdrop-blur" aria-live="polite">
+          <Badge variant="secondary" className="absolute top-2 right-2 hidden sm:inline-flex">{status}</Badge>
+          {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur sm:top-9">Drag to rotate · double-tap to reset</Badge>}
+          {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
+            <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
+          <div className="pointer-events-none absolute top-2 left-2 z-10 flex max-w-[64%] flex-col items-start gap-1.5 [&>*]:pointer-events-auto">
+          {info && <div className="bg-background/85 flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs backdrop-blur" aria-live="polite">
             <span className={`size-2 shrink-0 rounded-full ${info.band === 0 ? "animate-pulse" : ""}`} style={{ background: TEAM_COLORS[info.teamIdx] }} />
             <span className="truncate font-medium">{info.text}</span>
             {info.band < 2 && <span className="text-muted-foreground shrink-0 text-[10px]">{info.band === 1 ? "likely" : "unsure"}</span>}
           </div>}
-          {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
-            <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
-          {benchSel && !sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
+          {benchSel && !sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
             <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-(--minute)">{benchSel.role}</div></div>}
-          {sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
+          {sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
             <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
+          </div>
         </div>
         <div className="hidden lg:block">{controls}</div>
       </div>
