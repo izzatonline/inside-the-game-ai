@@ -151,7 +151,9 @@ function Match({ cfg }: { cfg: Config }) {
           <TabsContent value="moments" className="space-y-2">
             {recap && <Card size="sm" className="bg-emerald-500/10"><CardContent><h3 className="font-semibold">{recap.headline}</h3><p className="text-sm">{recap.body}</p><span className="text-muted-foreground text-[11px]">{recap.source === "llm" ? "AI-written recap" : "rules-based recap"}</span></CardContent></Card>}
             {overlays.length === 0 && <p className="text-muted-foreground py-6 text-center text-sm">Waiting for the first key moment…</p>}
-            {overlays.map((o) => <MomentCard key={o.moment_id} o={o} awayCode={codes[1]} />)}
+            <ol className="relative before:absolute before:top-2 before:bottom-0 before:left-[58px] before:w-px before:bg-border">
+              {overlays.map((o) => <MomentCard key={o.moment_id} o={o} awayCode={codes[1]} />)}
+            </ol>
             {overlays[0] && <details className="text-muted-foreground text-sm"><summary className="cursor-pointer">Machine-readable overlay (latest)</summary>
               <ScrollArea className="bg-muted mt-2 h-48 rounded-lg"><pre className="p-3 text-[11.5px]">{JSON.stringify(overlays[0], null, 2)}</pre></ScrollArea></details>}
           </TabsContent>
