@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, Box, ChevronDown, ChevronUp, Settings2 } from "lucide-react"
+import { Activity, Box, ChevronDown, ChevronUp, Moon, Settings2, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
 import { StatsPanel } from "@/components/StatsPanel"
+import { LineupsPanel } from "@/components/LineupsPanel"
+import { RecapCard } from "@/components/RecapCard"
 import { TacticsPanel } from "@/components/TacticsPanel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,9 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useMatchStream } from "@/hooks/useMatchStream"
+import { useTheme } from "@/hooks/useTheme"
 import { describeBall } from "@/lib/ball"
 import { TEAM_COLORS } from "@/lib/theme"
-import type { Config, Selected, Settings } from "@/lib/types"
+import type { BenchPick, Config, Selected, Settings } from "@/lib/types"
 
 const params = new URLSearchParams(location.search)
 const initial: Settings = {
@@ -55,10 +58,12 @@ function Match({ cfg }: { cfg: Config }) {
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")
-  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals } = useMatchStream(applied, runId)
+  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream(applied, runId, cfg)
+  const [benchSel, setBenchSel] = useState<BenchPick>(null)
   const info = ball ? describeBall(ball, cfg, codes) : null
   const narrow = useMemo(() => window.innerWidth < 480, [])
   const mobile = useIsMobile()
+  const { mode: themeMode, setMode: setThemeMode, dark } = useTheme()
   const [momentumOpen, setMomentumOpen] = useState(false)
   const [pitchHidden, setPitchHidden] = useState(false)
   const hidePitch = mobile && pitchHidden
@@ -85,7 +90,7 @@ function Match({ cfg }: { cfg: Config }) {
     setSelected(c ? { team: codes.indexOf(c), idx: Number(i) } : null)
     setApplied(draft); setRunId((n) => n + 1); setOpen(false)
   }
-  const sel = selected ? { name: cfg.teams[codes[selected.team]].players[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
+  const sel = selected ? { name: (roster[codes[selected.team]] ?? cfg.teams[codes[selected.team]].players)[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
   const shape = codes.map((c, i) => ({ c, i, p: tactics[c] })).filter((x) => x.p)
 
   const controls = (
@@ -107,17 +112,18 @@ function Match({ cfg }: { cfg: Config }) {
   )
 
   return (
-    <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
+    <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100vw_-_480px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
       <div ref={headerRef} className="bg-background sticky top-0 z-30 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-400">{stats?.minute ?? 0}'<Activity className="text-muted-foreground size-3" /></div></div>
+            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">{stats?.minute ?? 0}'<Activity className="text-muted-foreground size-3" /></div></div>
             <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
             </Card>
           {mobile && <Button variant="outline" size="icon-lg" aria-label={pitchHidden ? "Show pitch" : "Hide pitch"} aria-expanded={!pitchHidden} onClick={() => setPitchHidden((h) => !h)}>{pitchHidden ? <ChevronDown /> : <ChevronUp />}</Button>}
+          <Button variant="outline" size="icon-lg" aria-label="Toggle day or night" className="hidden sm:inline-flex" onClick={() => setThemeMode(dark ? "light" : "dark")}>{dark ? <Sun /> : <Moon />}</Button>
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
@@ -126,7 +132,7 @@ function Match({ cfg }: { cfg: Config }) {
             opacity: hidePitch ? 0 : 1, maxHeight: hidePitch ? 0 : pitchH, visibility: hidePitch ? "hidden" : "visible",
             transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
           } : undefined}>
-          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => cfg.teams[c].players)} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
+          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
           {info && <div className="bg-background/85 absolute bottom-2 left-2 flex max-w-[75%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs backdrop-blur" aria-live="polite">
@@ -136,13 +142,15 @@ function Match({ cfg }: { cfg: Config }) {
           </div>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
             <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
+          {benchSel && !sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
+            <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-amber-600 dark:text-amber-400">{benchSel.role}</div></div>}
           {sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
-            <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-amber-400">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
+            <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-amber-600 dark:text-amber-400">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
         </div>
         <div className="hidden lg:block">{controls}</div>
       </div>
 
-      <div className="min-w-0 px-3 pt-1.5 pb-[calc(24px+env(safe-area-inset-bottom))] lg:px-0 lg:pt-4">
+      <div className="min-w-0 px-3 pt-1.5 pb-[calc(24px+env(safe-area-inset-bottom))] lg:max-w-4xl lg:px-0 lg:pt-4">
         <div className="grid lg:hidden" style={{
           gridTemplateRows: hidePitch ? "0fr" : "1fr", opacity: hidePitch ? 0 : 1, visibility: hidePitch ? "hidden" : "visible",
           transition: hidePitch ? "grid-template-rows .5s ease, opacity .4s ease, visibility 0s linear .5s" : "grid-template-rows .5s ease, opacity .4s ease, visibility 0s",
@@ -151,10 +159,10 @@ function Match({ cfg }: { cfg: Config }) {
         </div>
         <Tabs defaultValue="moments">
           <div className="bg-background sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
-            <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger></TabsList>
+            <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger><TabsTrigger value="lineups" onClick={() => setPitchHidden(true)}>Line-ups</TabsTrigger></TabsList>
           </div>
           <TabsContent value="moments" className="space-y-2">
-            {recap && <Card size="sm" className="bg-emerald-500/10"><CardContent><h3 className="font-semibold">{recap.headline}</h3><p className="text-sm">{recap.body}</p><span className="text-muted-foreground text-[11px]">{recap.source === "llm" ? "AI-written recap" : "rules-based recap"}</span></CardContent></Card>}
+            {recap && <RecapCard recap={recap} codes={codes} />}
             {overlays.length === 0 && <p className="text-muted-foreground py-6 text-center text-sm">Waiting for the first key moment…</p>}
             <ol className="relative before:absolute before:top-2 before:bottom-0 before:left-[58px] before:w-px before:bg-border">
               {overlays.map((o) => <MomentCard key={o.moment_id} o={o} awayCode={codes[1]} />)}
@@ -164,16 +172,17 @@ function Match({ cfg }: { cfg: Config }) {
           </TabsContent>
           <TabsContent value="tactics"><TacticsPanel tactics={tactics} codes={codes} selected={selected} onSelect={setSelected} /></TabsContent>
           <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} /></TabsContent>
+          <TabsContent value="lineups"><LineupsPanel cfg={cfg} codes={codes} tactics={tactics} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
         </Tabs>
       </div>
       <Dialog open={momentumOpen} onOpenChange={setMomentumOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>Match momentum</DialogTitle><DialogDescription>Who was on top, minute by minute.</DialogDescription></DialogHeader>
-          <MomentumChart series={series} goals={goals} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
+          <MomentumChart series={series} goals={goals} cards={cards} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
             score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
         </DialogContent>
       </Dialog>
-      <SettingsSheet open={open} onOpenChange={setOpen} cfg={cfg} value={draft} onChange={setDraft} onApply={apply} />
+      <SettingsSheet theme={themeMode} onTheme={setThemeMode} open={open} onOpenChange={setOpen} cfg={cfg} value={draft} onChange={setDraft} onApply={apply} />
     </div>
   )
 }

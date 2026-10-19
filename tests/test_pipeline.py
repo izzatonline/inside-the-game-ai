@@ -52,6 +52,7 @@ def test_recap_offline():
         pipe.process(e, Profile())
     r = pipe.recap(Profile())
     assert r["headline"].startswith("Full time") and r["source"] == "template"
+    assert "." in r["body"] and "Possession" not in r["body"] and r["goals"] is not None
 
 
 def test_agent_framework_workflow_matches_plain_pipeline():
@@ -189,3 +190,22 @@ def test_tracking_reports_holder_phase_and_uncertainty():
         else:
             assert e.meta["holder"][0] == e.meta["poss"] and 0 <= e.meta["holder"][1] < 11
     assert any(e.meta["phase_conf"] < 0.8 for e in frames if e.meta["phase"] == "corner")
+
+
+def test_substitutions_warmups_and_roster_names():
+    ev = generate_match(7)
+    assert all(a.t <= b.t for a, b in zip(ev, ev[1:]))  # still time-ordered
+    subs = [e for e in ev if e.type == "substitution"]
+    warm = [e for e in ev if e.type == "warmup"]
+    assert len(subs) == 6 and len(warm) == 6
+    for s_ in subs:  # each sub warmed up first, and the replaced player never acts afterwards
+        assert any(w.team == s_.team and w.meta["sub_idx"] == s_.meta["sub_idx"] and w.t < s_.t for w in warm)
+        assert not any(e.player == s_.meta["player_out"] and e.t > s_.t for e in ev if e.type in ("pass", "shot"))
+
+
+def test_substitution_moment_and_tactics_roster_update():
+    pipe = MatchPipeline(NAMES, OfflineLLM())
+    out = [o for e in generate_match(7) for o in pipe.process(e, Profile(mode="analyst"))]
+    assert sum(o.kind == "substitution" for o in out) == 6
+    sub = next(o for o in out if o.kind == "substitution")
+    assert "replace" in sub.body

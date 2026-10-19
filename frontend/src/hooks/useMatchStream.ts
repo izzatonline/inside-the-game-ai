@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import type { BallInfo, Band } from "@/lib/ball"
-import type { Frames, Overlay, Recap, Settings, Stats, TacticsMap } from "@/lib/types"
+import type { BenchState, Config, Frames, Overlay, Recap, Settings, Stats, SubLog, TacticsMap } from "@/lib/types"
 
 export type Toast = { id: number; title: string; body: string; goal: boolean }
 
-export function useMatchStream(settings: Settings, runId: number) {
-  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null })
+const emptyBench = (cfg: Config): BenchState => Object.fromEntries(Object.keys(cfg.teams).map((c) => [c, { warming: [], used: [] }]))
+const startRoster = (cfg: Config) => Object.fromEntries(Object.entries(cfg.teams).map(([c, t]) => [c, t.players.slice()]))
+
+export function useMatchStream(settings: Settings, runId: number, cfg: Config) {
+  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null })
   const latest = useRef(settings)
   latest.current = settings
   const [stats, setStats] = useState<Stats | null>(null)
@@ -16,12 +19,16 @@ export function useMatchStream(settings: Settings, runId: number) {
   const [toast, setToast] = useState<Toast | null>(null)
   const [ball, setBall] = useState<BallInfo | null>(null)
   const [series, setSeries] = useState<{ minute: number; value: number }[]>([])
-  const [goals, setGoals] = useState<{ minute: number; team: string }[]>([])
+  const [goals, setGoals] = useState<{ minute: number; team: string; player?: string | null }[]>([])
+  const [cards, setCards] = useState<{ minute: number; team: string; player?: string | null }[]>([])
+  const [subLog, setSubLog] = useState<SubLog[]>([])
+  const [bench, setBench] = useState<BenchState>(() => emptyBench(cfg))
+  const [roster, setRoster] = useState<Record<string, string[]>>(() => startRoster(cfg))
 
   useEffect(() => {
     const s = latest.current
-    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null }
-    setBall(null); setSeries([]); setGoals([]); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null)
+    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null }
+    setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null)
     const player = s.player.split(":")[2] ?? ""
     const q = new URLSearchParams({ seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric })
     const es = new EventSource(`/api/${s.src}?${q}`)
@@ -58,13 +65,25 @@ export function useMatchStream(settings: Settings, runId: number) {
       b.sum += st.momentum; b.n++; acc.set(st.minute, b)
       setSeries(Array.from(acc, ([minute, v]) => ({ minute, value: v.sum / v.n })))
     })
+    es.addEventListener("bench", (e) => {
+      const b = JSON.parse((e as MessageEvent).data) as { type: string; team: string; player: string; minute: number; meta: { sub_idx: number; slot: number; number: number; player_out?: string } }
+      setBench((prev) => {
+        const cur = prev[b.team] ?? { warming: [], used: [] }
+        return { ...prev, [b.team]: b.type === "warmup"
+          ? { ...cur, warming: [...new Set([...cur.warming, b.meta.sub_idx])] }
+          : { warming: cur.warming.filter((i) => i !== b.meta.sub_idx), used: [...new Set([...cur.used, b.meta.sub_idx])] } }
+      })
+      if (b.type === "substitution") setSubLog((prev) => [...prev, { minute: b.minute, team: b.team, slot: b.meta.slot, player_in: b.player, player_out: b.meta.player_out ?? "", number: b.meta.number }])
+      if (b.type === "substitution") setRoster((prev) => ({ ...prev, [b.team]: prev[b.team].map((n, i) => (i === b.meta.slot ? b.player : n)) }))
+    })
     es.addEventListener("tactics", (e) => { setTactics(JSON.parse((e as MessageEvent).data)); setStatus("AI shape analysis live") })
     es.addEventListener("overlay", (e) => {
       const o = JSON.parse((e as MessageEvent).data) as Overlay
       setOverlays((prev) => [o, ...prev].slice(0, 40))
-      if (o.kind === "goal") setGoals((prev) => [...prev, { minute: o.minute, team: o.team }])
+      if (o.kind === "card") setCards((prev) => [...prev, { minute: o.minute, team: o.team, player: o.player }])
+      if (o.kind === "goal") { setGoals((prev) => [...prev, { minute: o.minute, team: o.team, player: o.player }]); frames.current.goal = { team: o.team, at: performance.now() } }
       if (o.kind === "goal") show(o.headline, o.body, true)
-      else if (o.kind === "tactic_shift") show(o.headline, o.body, false)
+      else if (o.kind === "tactic_shift" || o.kind === "substitution") show(o.headline, o.body, false)
     })
     es.addEventListener("recap", (e) => {
       const r = JSON.parse((e as MessageEvent).data) as Recap
@@ -80,5 +99,5 @@ export function useMatchStream(settings: Settings, runId: number) {
     return () => clearTimeout(t)
   }, [toast])
 
-  return { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals }
+  return { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster }
 }

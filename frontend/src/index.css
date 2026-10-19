@@ -134,3 +134,7 @@
   @keyframes accordion-down { from { height: 0; } to { height: var(--accordion-panel-height); } }
   @keyframes accordion-up { from { height: var(--accordion-panel-height); } to { height: 0; } }
 }
+
+/* team colours for text: darker on light backgrounds for contrast */
+:root { --team-0: #0369a1; --team-1: #be123c; }
+.dark { --team-0: #38bdf8; --team-1: #fb7185; }

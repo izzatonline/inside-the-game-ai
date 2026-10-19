@@ -4,12 +4,12 @@ import { TEAM_COLORS } from "@/lib/theme"
 export type MomentumPoint = { minute: number; value: number }
 export type GoalMark = { minute: number; team: string }
 
-type Props = { series: MomentumPoint[]; goals: GoalMark[]; codes: string[]; names: string[]; score: [number, number]; minute: number }
+type Props = { series: MomentumPoint[]; goals: GoalMark[]; cards?: GoalMark[]; codes: string[]; names: string[]; score: [number, number]; minute: number }
 
 const H = 230, PAD_L = 26, PAD_R = 10, GAP = 18, AXIS = H / 2, MAXH = H / 2 - 36
 
 /** Per-minute pressure balance: home bars above the line, away bars below, goals marked. */
-export function MomentumChart({ series, goals, codes, names, score, minute }: Props) {
+export function MomentumChart({ series, goals, cards = [], codes, names, score, minute }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [W, setW] = useState(560)
   useEffect(() => {
@@ -27,9 +27,9 @@ export function MomentumChart({ series, goals, codes, names, score, minute }: Pr
   return (
     <div className="space-y-2" ref={box}>
       <div className="flex items-center justify-center gap-3 text-sm font-semibold">
-        <span style={{ color: TEAM_COLORS[0] }}>{names[0]}</span>
+        <span style={{ color: "var(--team-0)" }}>{names[0]}</span>
         <span className="text-xl font-extrabold tabular-nums">{score[0]} - {score[1]}</span>
-        <span style={{ color: TEAM_COLORS[1] }}>{names[1]}</span>
+        <span style={{ color: "var(--team-1)" }}>{names[1]}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block w-full" role="img" aria-label={`Match momentum by minute, ${names[0]} above the line and ${names[1]} below`}>
         <line x1={PAD_L} x2={W - PAD_R} y1={AXIS} y2={AXIS} className="stroke-muted-foreground" strokeOpacity={0.6} />
@@ -50,6 +50,10 @@ export function MomentumChart({ series, goals, codes, names, score, minute }: Pr
               <text x={x} y={home ? y + 22 : y - 12} textAnchor="middle" fontSize={9} className="fill-muted-foreground">{g.minute}'</text>
             </g>
           )
+        })}
+        {cards.map((c, i) => {
+          const home = c.team === codes[0], x = xOf(c.minute) + barW / 2, y = home ? 34 : H - 52
+          return <g key={'c' + i}><line x1={x} x2={x} y1={home ? y + 6 : y - 2} y2={AXIS} stroke="currentColor" strokeOpacity={0.4} strokeDasharray="2 2" /><rect x={x - 3.5} y={y - (home ? 6 : 0)} width={7} height={10} rx={1.2} fill="#facc15" /></g>
         })}
         <text x={PAD_L - 6} y={AXIS + 4} textAnchor="end" fontSize={10} className="fill-muted-foreground">0'</text>
         <text x={htX} y={H - 14} textAnchor="middle" fontSize={11} fontWeight={700} className="fill-foreground">HT</text>

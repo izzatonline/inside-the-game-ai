@@ -14,7 +14,7 @@ from .llm import get_llm
 from .models import Moment, Overlay, Profile
 from .state import MatchState
 from .tactics import FEATURED
-from .templates import CHIPS, LANGUAGES, RECAP, T, TACTIC_SUMMARY
+from .templates import CHIPS, LANGUAGES, RECAP, RECAP_NARRATIVE, T, TACTIC_SUMMARY
 
 _NUM = re.compile(r"\d+(?:\.\d+)?")
 
@@ -128,33 +128,57 @@ class NarratorAgent:
 
 
 class RecapAgent:
-    SYSTEM = ("You are a match reporter. Write a 3-sentence full-time recap using ONLY the facts "
-              "given. Language: {language}. Plain text.")
+    SYSTEM = ("You are a match reporter. Write exactly 2 short sentences summarising the match for a general fan: "
+              "the result and how it unfolded. Use ONLY the facts given; never invent numbers or names. "
+              "Language: {language}. Plain text.")
 
     def __init__(self, llm) -> None:
         self.llm = llm
 
+    @staticmethod
+    def _narrative(facts: Dict[str, Any], lang: str) -> str:
+        t = RECAP_NARRATIVE.get(lang, RECAP_NARRATIVE["en"])
+        hs, as_ = facts["score_home"], facts["score_away"]
+        if hs == as_:
+            text = _fmt(t["draw"], {"home": facts["home"], "away": facts["away"], "hs": hs, "as": as_})
+        else:
+            win_home = hs > as_
+            text = _fmt(t["win"], {"winner": facts["home"] if win_home else facts["away"],
+                                   "loser": facts["away"] if win_home else facts["home"],
+                                   "ws": max(hs, as_), "ls": min(hs, as_)})
+            if facts["comeback"]:
+                text += t["comeback"]
+        xg_h, xg_a = facts["xg_home"], facts["xg_away"]
+        text += _fmt(t["detail"], {
+            "poss_team": facts["home"] if facts["poss_home"] >= facts["poss_away"] else facts["away"],
+            "poss_pct": max(facts["poss_home"], facts["poss_away"]),
+            "xg_team": facts["home"] if xg_h >= xg_a else facts["away"], "xg_h": xg_h, "xg_a": xg_a})
+        return text
+
     def run(self, state: MatchState, top: List[Tuple[Moment, Overlay]], p: Profile) -> Dict[str, Any]:
         snap = state.snapshot()["teams"]
         h, a = state.codes
+        goals = state.goal_log
+        winner_home = snap[h]["goals"] > snap[a]["goals"]
+        trailed = any((g["score_home"] < g["score_away"]) if winner_home else (g["score_away"] < g["score_home"]) for g in goals)
         facts = {
+            "home": snap[h]["name"], "away": snap[a]["name"], "score_home": snap[h]["goals"], "score_away": snap[a]["goals"],
             "scoreline": f"{snap[h]['name']} {snap[h]['goals']}-{snap[a]['goals']} {snap[a]['name']}",
             "poss_home": snap[h]["possession_pct"], "poss_away": snap[a]["possession_pct"],
             "shots_home": snap[h]["shots"], "shots_away": snap[a]["shots"],
             "xg_home": snap[h]["xg"], "xg_away": snap[a]["xg"],
-            "key_moments": [{"minute": m.minute, "kind": m.kind, "player": m.player,
-                             "team": m.facts["team_name"]} for m, _ in top],
+            "comeback": bool(goals) and snap[h]["goals"] != snap[a]["goals"] and trailed,
+            "goals": [{"minute": g["minute"], "scorer": g["player"], "team": snap[g["team"]]["name"]} for g in goals],
         }
-        text = self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(p.lang, p.lang)),
-                                 json.dumps(facts), 300)
+        text = self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(p.lang, p.lang)), json.dumps(facts), 220)
         source = "llm"
         if not text or not FactChecker().run(text, facts):
-            head, body = RECAP.get(p.lang, RECAP["en"])
-            text = _fmt(body, facts) + " " + " ".join(o.body for _, o in top)
-            source = "template"
-        return {"headline": _fmt(RECAP.get(p.lang, RECAP["en"])[0], facts), "body": text,
-                "source": source, "stats": snap}
-
+            text, source = self._narrative(facts, p.lang), "template"
+        return {
+            "headline": _fmt(RECAP.get(p.lang, RECAP["en"])[0], facts), "body": text, "source": source,
+            "stats": snap, "home": h, "away": a, "goals": goals, "cards": state.card_log, "subs": state.sub_log,
+            "key_moments": [{"minute": m.minute, "kind": m.kind, "headline": o.headline, "team": m.team} for m, o in top],
+        }
 
 
 def tactical_facts(team: Dict[str, Any], opp: Dict[str, Any]) -> Dict[str, Any]:
@@ -236,7 +260,7 @@ class MatchPipeline:
                 importance=m.importance, headline=headline, body=body,
                 why=why if profile.mode == "analyst" or m.importance >= 0.9 else "",
                 chips=self.personalizer.chips(m, profile), lang=profile.lang, mode=profile.mode,
-                source=source, verified=True, duration_s=8.0 if m.importance >= 0.9 else 5.0)
+                source=source, verified=True, duration_s=8.0 if m.importance >= 0.9 else 5.0, player=m.player)
             self.shown.append((m, ov))
             overlays.append(ov)
         return overlays

@@ -20,6 +20,12 @@ TEAMS: Dict[str, Dict] = {
     "NOR": {
         "name": "Northbridge FC",
         "tactic": {"line": 8.0, "width": 1.0, "press": 0.8, "long": 0.08},  # high line, press, short build-up
+        "staff": {
+            "coach": "Marco Villanueva", "assistants": ["Lena Voss", "Tariq Aziz"],
+            "subs": [("Pieter Jansen", "GK", 12), ("Ravi Menon", "DF", 13), ("Oskar Berg", "DF", 14),
+                     ("Hugo Marin", "MF", 15), ("Sione Tuilagi", "MF", 16), ("Amadou Keita", "MF", 17),
+                     ("Nico Valente", "FW", 18), ("Bruno Teles", "FW", 19), ("Jonas Eklund", "FW", 20)],
+        },
         "players": [
             ("Tomas Reyes", "GK"), ("Callum Draper", "DF"), ("Idris Okafor", "DF"),
             ("Mats Lindqvist", "DF"), ("Joao Barreto", "DF"), ("Felix Hartmann", "MF"),
@@ -36,6 +42,12 @@ TEAMS: Dict[str, Dict] = {
     "HAR": {
         "name": "Harbor City",
         "tactic": {"line": -6.0, "width": 0.95, "press": 0.3, "long": 0.24},  # low block, direct counter
+        "staff": {
+            "coach": "Elena Rostova", "assistants": ["Gareth Pugh", "Imani Okoye"],
+            "subs": [("Davi Moreira", "GK", 12), ("Kasper Lund", "DF", 13), ("Yusuf Demir", "DF", 14),
+                     ("Felipe Rojas", "MF", 15), ("Anton Kovac", "MF", 16), ("Mateo Silva", "MF", 17),
+                     ("Isaac Boateng", "FW", 18), ("Leo Fontaine", "FW", 19), ("Ciaran Doyle", "FW", 20)],
+        },
         "players": [
             ("Elias Brandt", "GK"), ("Rui Carvalho", "DF"), ("Owen Maddox", "DF"),
             ("Sami Haddad", "DF"), ("Pedro Salgado", "DF"), ("Niko Petrov", "MF"),
@@ -57,13 +69,6 @@ _ZONE_WEIGHTS = {
     "mid": {"GK": 0.1, "DF": 2.0, "MF": 6.0, "FW": 2.0},
     "att": {"GK": 0.0, "DF": 0.5, "MF": 3.0, "FW": 6.0},
 }
-
-
-def _pick(rng: random.Random, team: str, x: float) -> str:
-    zone = "def" if x < 35 else "mid" if x < 68 else "att"
-    players = TEAMS[team]["players"]
-    weights = [_ZONE_WEIGHTS[zone][pos] for _, pos in players]
-    return rng.choices([n for n, _ in players], weights=weights)[0]
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -123,6 +128,28 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
 
     events: List[Event] = []
     ids = itertools.count(1)
+    roster = {c: list(TEAMS[c]["players"]) for c in codes}  # changes when substitutions happen
+
+    def pick(team: str, x: float) -> str:
+        zone = "def" if x < 35 else "mid" if x < 68 else "att"
+        players = roster[team]
+        weights = [_ZONE_WEIGHTS[zone][pos] for _, pos in players]
+        return rng.choices([n for n, _ in players], weights=weights)[0]
+
+    # Bench plan from a separate RNG so the match itself is unchanged: 3 subs per team, warm-up 2.5 min before.
+    plan = []
+    brng = random.Random(seed * 7919 + 13)
+    for c in codes:
+        subs = TEAMS[c]["staff"]["subs"]
+        free = list(range(len(subs)))
+        for slot, minute in zip(brng.sample(range(1, 11), 3), sorted(brng.sample(range(58, 84), 3))):
+            pos = TEAMS[c]["players"][slot][1]
+            idx = next((i for i in free if subs[i][1] == pos), next(i for i in free if subs[i][1] != "GK"))
+            free.remove(idx)
+            when = minute * 60.0 + brng.uniform(0, 50)
+            plan.append((when - 150, "warmup", c, slot, idx))
+            plan.append((when, "substitution", c, slot, idx))
+    plan.sort()
 
     def emit(t, type_, team, player, x, y, outcome="", **meta):
         events.append(Event(next(ids), round(t, 1), type_, team, player,
@@ -150,13 +177,22 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
 
     t, poss, x, y, pressured = 0.0, codes[0], 50.0, 50.0, False
     score = {c: 0 for c in codes}
-    emit(0, "kickoff", poss, _pick(rng, poss, 50), 50, 50)
+    emit(0, "kickoff", poss, pick(poss, 50), 50, 50)
     track(0.0, poss, x, y)
 
     while True:
         t += rng.uniform(3, 8)
         if t >= duration:
             break
+        while plan and plan[0][0] <= t:
+            when, kind, c, slot, idx = plan.pop(0)
+            sub_name, sub_pos, number = TEAMS[c]["staff"]["subs"][idx]
+            if kind == "warmup":
+                emit(when, "warmup", c, sub_name, 50, 50, sub_idx=idx, slot=slot, number=number)
+            else:
+                out_name = roster[c][slot][0]
+                roster[c][slot] = (sub_name, sub_pos)
+                emit(when, "substitution", c, sub_name, 50, 50, sub_idx=idx, slot=slot, number=number, player_out=out_name)
         opp = other[poss]
         boost = {c: 0.45 if any(s <= t < e and tm == c for s, e, tm in phases) else 0.0
                  for c in codes}
@@ -166,7 +202,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         ph, phc, loose = "open", 1.0, False
 
         if x >= 72 and rng.random() < 0.09:
-            shooter = _pick(rng, poss, x)
+            shooter = pick(poss, x)
             dist = math.hypot((100 - x) * 1.05, (y - 50) * 0.68)
             xg = round(_clamp(0.65 * math.exp(-dist / 11.0) * (att / 1.0) ** 0.5, 0.02, 0.8), 2)
             u = rng.random()
@@ -180,7 +216,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
             shooter_team, poss, pressured = poss, opp, False
             if outcome == "goal":
                 x = y = 50.0
-                emit(t + 40, "kickoff", poss, _pick(rng, poss, 50), 50, 50)
+                emit(t + 40, "kickoff", poss, pick(poss, 50), 50, 50)
                 t += 40
                 ph = "kickoff"
             elif outcome == "blocked" and len(events) % 2 == 0:
@@ -190,39 +226,39 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
                 ph, phc = "corner", 0.62
             else:
                 x, y = 8.0, 50.0
-                emit(t, "possession_change", poss, _pick(rng, poss, 8), x, y, cause="shot_" + outcome)
+                emit(t, "possession_change", poss, pick(poss, 8), x, y, cause="shot_" + outcome)
                 if outcome == "off_target":
                     emit(t, "restart", poss, "", x, y, kind="goal_kick")
                     ph, phc = "goal_kick", 0.95
                 elif outcome == "saved":
                     ph, phc = "keeper_hold", 0.95
         elif r < p_lose:
-            tackler = _pick(rng, opp, 100 - x)
+            tackler = pick(opp, 100 - x)
             kind = "tackle" if rng.random() < 0.6 else "interception"
             emit(t, kind, opp, tackler, 100 - x, 100 - y, "won")
             poss, x, y, pressured = opp, 100 - x, 100 - y, False
             emit(t, "possession_change", poss, tackler, x, y, cause=kind)
             loose = True  # the ball is up for grabs for a moment
         elif r < p_lose + 0.12 * (0.4 + TEAMS[opp]["tactic"]["press"]):
-            emit(t, "pressure", opp, _pick(rng, opp, 100 - x), 100 - x, 100 - y,
+            emit(t, "pressure", opp, pick(opp, 100 - x), 100 - x, 100 - y,
                  intensity=round(rng.uniform(0.3, 1.0), 2))
             pressured = True
         elif rng.random() < 0.15:
-            carrier = _pick(rng, poss, x)
+            carrier = pick(poss, x)
             dx = _clamp(rng.gauss(6, 4), 0, 20)
             speed = round(_clamp(rng.gauss(24, 5), 12, 36), 1)
             emit(t, "carry", poss, carrier, x, y, "", speed_kmh=speed,
                  distance_m=round(dx * 1.05, 1))
             x = _clamp(x + dx, 2, 98)
         else:
-            passer = _pick(rng, poss, x)
+            passer = pick(poss, x)
             dx = rng.gauss(26, 8) if rng.random() < TEAMS[poss]["tactic"]["long"] else rng.gauss(8, 9)
             nx, ny = _clamp(x + dx, 2, 98), _clamp(y + rng.gauss(0, 14), 4, 96)
             dist = math.hypot((nx - x) * 1.05, (ny - y) * 0.68)
             difficulty = _clamp(0.1 + dist / 60 + (0.25 if pressured else 0)
                                 + (0.15 if nx > 70 else 0), 0, 1)
             p_ok = _clamp(1.0 - difficulty * 0.4 + (strength[poss] - 1) * 0.2, 0.2, 0.97)
-            receiver = _pick(rng, poss, nx)
+            receiver = pick(poss, nx)
             ok = rng.random() < p_ok
             emit(t, "pass", poss, passer, x, y, "complete" if ok else "incomplete",
                  receiver=receiver, distance_m=round(dist, 1), difficulty=round(difficulty, 2),
@@ -236,11 +272,26 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
                 ph, phc = "throw_in", 0.92
             else:
                 poss, x, y = opp, 100 - nx, 100 - ny
-                emit(t, "possession_change", poss, _pick(rng, poss, x), x, y, cause="turnover")
+                emit(t, "possession_change", poss, pick(poss, x), x, y, cause="turnover")
             pressured = False
         track(t, poss, x, y, ph, phc, loose)
 
+    # Discipline layer from its own RNG so the match flow above is untouched: some pressure events are
+    # fouls (free kick to the other side, occasionally a yellow card) and some failed final-third passes offside.
+    frng = random.Random(seed * 104729 + 7)
+    yellows = {c: 0 for c in codes}
+    for e in list(events):
+        if e.type == "pressure" and frng.random() < 0.22:
+            emit(e.t, "foul", e.team, e.player, e.x, e.y, against=other[e.team])
+            emit(e.t + 0.1, "restart", other[e.team], "", 100 - e.x, 100 - e.y, kind="free_kick")
+            if frng.random() < 0.13 and yellows[e.team] < 4:
+                yellows[e.team] += 1
+                emit(e.t + 0.2, "card", e.team, e.player, e.x, e.y, card="yellow")
+        elif e.type == "pass" and e.outcome == "incomplete" and e.x >= 62 and frng.random() < 0.09:
+            emit(e.t, "offside", e.team, e.meta.get("receiver", ""), e.x, e.y)
+
     emit(duration, "fulltime", poss, "", x, y, score=dict(score))
+    events.sort(key=lambda ev: (ev.t, ev.id))
     return events
 
 

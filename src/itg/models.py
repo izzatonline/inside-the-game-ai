@@ -82,6 +82,7 @@ class Overlay:
     source: str  # llm | template
     verified: bool
     duration_s: float
+    player: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

@@ -3,9 +3,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import type { ThemeMode } from "@/hooks/useTheme"
 import type { Config, Settings } from "@/lib/types"
 
-type Props = { open: boolean; onOpenChange: (o: boolean) => void; cfg: Config; value: Settings; onChange: (s: Settings) => void; onApply: () => void }
+type Props = { theme: ThemeMode; onTheme: (m: ThemeMode) => void; open: boolean; onOpenChange: (o: boolean) => void; cfg: Config; value: Settings; onChange: (s: Settings) => void; onApply: () => void }
 
 function Field({ id, label, value, items, onValue }: { id: string; label: string; value: string; items: { value: string; label: string }[]; onValue: (v: string) => void }) {
   return (
@@ -19,7 +20,7 @@ function Field({ id, label, value, items, onValue }: { id: string; label: string
   )
 }
 
-export function SettingsSheet({ open, onOpenChange, cfg, value, onChange, onApply }: Props) {
+export function SettingsSheet({ theme, onTheme, open, onOpenChange, cfg, value, onChange, onApply }: Props) {
   const set = (k: keyof Settings) => (v: string) => onChange({ ...value, [k]: v })
   const codes = Object.keys(cfg.teams)
   const players = codes.flatMap((c) => cfg.teams[c].players.map((p, i) => ({ value: `${c}:${i}:${p}`, label: `${p} (${c})` })))
@@ -31,6 +32,7 @@ export function SettingsSheet({ open, onOpenChange, cfg, value, onChange, onAppl
           <SheetDescription>The same match, tailored to the viewer. Model: {cfg.llm} · orchestration: {cfg.orchestration}.</SheetDescription>
         </SheetHeader>
         <div className="grid gap-3 px-4 pb-4">
+          <Field id="theme" label="Appearance" value={theme} onValue={(v) => onTheme(v as ThemeMode)} items={[{ value: "system", label: "Match my device" }, { value: "light", label: "Day (light)" }, { value: "dark", label: "Night (dark)" }]} />
           <Field id="mode" label="View" value={value.mode} onValue={set("mode")} items={[{ value: "casual", label: "Casual fan" }, { value: "analyst", label: "Analyst" }]} />
           <Field id="lang" label="Language" value={value.lang} onValue={set("lang")} items={Object.entries(cfg.languages).map(([v, label]) => ({ value: v, label }))} />
           <Field id="team" label="Favourite club" value={value.team} onValue={set("team")} items={[{ value: "", label: "Neutral" }, ...codes.map((c) => ({ value: c, label: cfg.teams[c].name }))]} />

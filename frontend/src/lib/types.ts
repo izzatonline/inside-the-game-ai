@@ -2,7 +2,7 @@ export type Chip = { label: string; value: string }
 export type Overlay = {
   moment_id: string; t: number; minute: number; kind: string; team: string; importance: number
   headline: string; body: string; why: string; chips: Chip[]; lang: string; mode: string
-  source: string; verified: boolean
+  source: string; verified: boolean; player?: string | null
 }
 export type Role = { idx: number; name: string; role: string; short: string; x_in: number; y_in: number }
 export type TeamTactics = {
@@ -13,12 +13,23 @@ export type TeamTactics = {
 export type TacticsMap = Record<string, TeamTactics>
 export type TeamStats = {
   name: string; goals: number; possession_pct: number; shots: number; on_target: number; xg: number; pass_acc_pct: number
+  passes: number; shots_off: number; shots_blocked: number; saves: number; corners: number; free_kicks: number; throw_ins: number
+  goal_kicks: number; fouls: number; yellow: number; offsides: number; crosses: number; tackles: number; interceptions: number; pressures: number
 }
 export type Stats = { t: number; minute: number; momentum: number; teams: Record<string, TeamStats> }
-export type Recap = { headline: string; body: string; source: string }
+export type GoalLog = { minute: number; team: string; player: string; score_home: number; score_away: number }
+export type CardLog = { minute: number; team: string; player: string; card: string }
+export type SubLog = { minute: number; team: string; slot: number; player_in: string; player_out: string; number: number }
+export type Recap = {
+  headline: string; body: string; source: string; stats: Record<string, TeamStats>; home: string; away: string
+  goals: GoalLog[]; cards: CardLog[]; subs: SubLog[]; key_moments: { minute: number; kind: string; headline: string; team: string }[]
+}
+export type Staff = { coach: string; assistants: string[]; subs: { name: string; pos: string; number: number }[] }
+export type BenchState = Record<string, { warming: number[]; used: number[] }>
+export type BenchPick = { team: number; name: string; role: string } | null
 export type Config = {
   llm: string; orchestration: string; languages: Record<string, string>
-  teams: Record<string, { name: string; players: string[] }>
+  teams: Record<string, { name: string; players: string[]; slots: number[][]; staff: Staff }>
 }
 export type Settings = {
   mode: string; lang: string; team: string; player: string; metric: string; src: string; speed: string; seed: string
@@ -27,5 +38,6 @@ export type Frames = {
   target: number[][] | null; ball: number[]; trail: number[][]; n: number; reset: boolean
   holder: [string, number] | null; band: 0 | 1 | 2; phase: string; phaseBand: 0 | 1 | 2; poss: string
   lastConfirmed: { team: string; idx: number; at: number } | null
+  goal: { team: string; at: number } | null
 }
 export type Selected = { team: number; idx: number } | null

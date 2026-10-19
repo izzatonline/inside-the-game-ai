@@ -37,6 +37,12 @@ T = {
         "role_reveal": ("Role: {player}",
                         "{minute}' - {player} operates as {role} for {team_name}, averaging {x_in}% up the pitch in possession.",
                         "This role changes {team_name}'s shape between defence and attack."),
+        "substitution": ("Sub: {player_in} on",
+                         "{minute}' - {team_name} replace {player_out} with {player_in}.",
+                         "Fresh legs change how {team_name} can press and build for the rest of the match."),
+        "card": ("Yellow card: {player}",
+                 "{minute}' - {player} ({team_name}) is booked for a foul.",
+                 "A booking limits how hard {player} can challenge for the rest of the match."),
     },
     "es": {
         "goal": ("¡GOL! {player}",
@@ -72,6 +78,12 @@ T = {
         "role_reveal": ("Rol: {player}",
                         "{minute}' - {player} actúa como {role} en {team_name}, con un {x_in}% de avance medio en posesión.",
                         "Este rol cambia la forma de {team_name} entre defensa y ataque."),
+        "substitution": ("Cambio: entra {player_in}",
+                         "{minute}' - {team_name} sustituye a {player_out} por {player_in}.",
+                         "Piernas frescas cambian cómo {team_name} puede presionar y construir el resto del partido."),
+        "card": ("Tarjeta amarilla: {player}",
+                 "{minute}' - {player} ({team_name}) ve la amarilla por una falta.",
+                 "Una amonestación limita cuánto puede disputar {player} el resto del partido."),
     },
     "ms": {
         "goal": ("GOL! {player}",
@@ -107,6 +119,12 @@ T = {
         "role_reveal": ("Peranan: {player}",
                         "Minit {minute} - {player} bermain sebagai {role} untuk {team_name}, purata {x_in}% ke hadapan semasa memiliki bola.",
                         "Peranan ini mengubah bentuk {team_name} antara bertahan dan menyerang."),
+        "substitution": ("Pertukaran: {player_in} masuk",
+                         "Minit {minute} - {team_name} menggantikan {player_out} dengan {player_in}.",
+                         "Tenaga baharu mengubah cara {team_name} menekan dan membina serangan sepanjang baki perlawanan."),
+        "card": ("Kad kuning: {player}",
+                 "Minit {minute} - {player} ({team_name}) diberi kad kuning kerana kesalahan.",
+                 "Kad kuning mengehadkan sejauh mana {player} boleh bertanding sepanjang baki perlawanan."),
     },
 }
 
@@ -140,4 +158,16 @@ TACTIC_SUMMARY = {
     "en": "{name} line up in a {formation} ({primary}): defensive line {line_height}, PPDA {ppda}, {width_m} m wide.",
     "es": "{name} se alinea en {formation} ({primary}): línea defensiva {line_height}, PPDA {ppda}, {width_m} m de ancho.",
     "ms": "{name} beraksi dalam {formation} ({primary}): barisan pertahanan {line_height}, PPDA {ppda}, lebar {width_m} m.",
+}
+
+RECAP_NARRATIVE = {
+    "en": {"win": "{winner} beat {loser} {ws}-{ls}.", "draw": "{home} and {away} drew {hs}-{as}.",
+           "comeback": " They came from behind to do it.",
+           "detail": " {poss_team} had {poss_pct}% of the ball, while {xg_team} created the better chances ({xg_h}-{xg_a} xG)."},
+    "es": {"win": "{winner} venció a {loser} por {ws}-{ls}.", "draw": "{home} y {away} empataron {hs}-{as}.",
+           "comeback": " Lo logró remontando.",
+           "detail": " {poss_team} tuvo el {poss_pct}% de la posesión, mientras que {xg_team} generó las mejores ocasiones ({xg_h}-{xg_a} xG)."},
+    "ms": {"win": "{winner} menewaskan {loser} {ws}-{ls}.", "draw": "{home} dan {away} seri {hs}-{as}.",
+           "comeback": " Mereka bangkit daripada ketinggalan.",
+           "detail": " {poss_team} menguasai {poss_pct}% bola, manakala {xg_team} mencipta peluang lebih baik ({xg_h}-{xg_a} xG)."},
 }

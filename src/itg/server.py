@@ -34,7 +34,11 @@ _caches: Dict[int, dict] = {}  # narration cache per match seed, shared by all v
 
 
 def _roster():
-    return {c: {"name": v["name"], "players": [n for n, _ in v["players"]]} for c, v in TEAMS.items()}
+    return {c: {"name": v["name"], "players": [n for n, _ in v["players"]],
+                "slots": [list(o) for o, _ in v["slots"]],
+                "staff": {"coach": v["staff"]["coach"], "assistants": v["staff"]["assistants"],
+                          "subs": [{"name": n, "pos": p, "number": k} for n, p, k in v["staff"]["subs"]]}}
+            for c, v in TEAMS.items()}
 
 
 async def _step(pipe, ev, profile, last_stats: float):
@@ -44,6 +48,8 @@ async def _step(pipe, ev, profile, last_stats: float):
     if ev.type == "tracking":
         out.append(_sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase", "phase_conf")}
                         | {"t": ev.t}))
+    if ev.type in ("warmup", "substitution"):
+        out.append(_sse("bench", ev.to_dict()))
     tac = pipe.state.tactics.take_update()
     if tac:
         tac = await asyncio.to_thread(pipe.localize_tactics, tac, profile, ev.t)
@@ -128,12 +134,17 @@ async def live(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str =
     pipe = MatchPipeline({c: v["name"] for c, v in TEAMS.items()}, _llm,
                          _caches.setdefault(seed, {}), _runner)
     history, q = bc.subscribe()
+    catchup = []
     for ev in history:  # catch-up: rebuild state silently
         pipe.state.ingest(ev)
+        if ev.type in ("warmup", "substitution"):
+            catchup.append(_sse("bench", ev.to_dict()))
 
     async def gen():
         last_stats = -99.0
         try:
+            for chunk in catchup:
+                yield chunk
             if history:
                 yield _sse("stats", pipe.state.snapshot())
                 tac = pipe.state.tactics.take_update()

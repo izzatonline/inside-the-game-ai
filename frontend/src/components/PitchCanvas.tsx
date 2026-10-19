@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import type { Frames, Selected, TacticsMap } from "@/lib/types"
+import type { BenchPick, BenchState, Frames, Selected, Staff, TacticsMap } from "@/lib/types"
 import { BADGE_COLORS, TEAM_COLORS } from "@/lib/theme"
 import { isDeadBall, lastName, phaseLabel } from "@/lib/ball"
 
@@ -13,6 +13,9 @@ type Props = {
   selected: Selected
   onSelect: (s: Selected) => void
   view3d: boolean
+  staff: Staff[]
+  bench: BenchState
+  onBench: (b: BenchPick) => void
 }
 
 const GW = 44, GH = 28
@@ -38,27 +41,27 @@ export function PitchCanvas(props: Props) {
     const ctrl = document.createElement("canvas")
     ctrl.width = GW; ctrl.height = GH
     const cg = ctrl.getContext("2d")!
-    let W = 300, H = 195, raf = 0, last = 0
+    let W = 300, H = 195, Hp = 195, raf = 0, last = 0
     let cur: number[][] | null = null, curBall = [50, 50]
-    const X = (x: number) => (x / 100) * W, Y = (y: number) => (y / 100) * H, M = (m: number) => (m * W) / 105
+    const X = (x: number) => (x / 100) * W, Y = (y: number) => (y / 100) * Hp, M = (m: number) => (m * W) / 105
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      W = cv.clientWidth; H = live.current.view3d ? W * 0.625 : (W * 68) / 105
+      W = cv.clientWidth; Hp = (W * 68) / 105; H = live.current.view3d ? W * 0.625 : Hp + (W * 9.5) / 105
       cv.width = W * dpr; cv.height = H * dpr
       g.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     const ro = new ResizeObserver(resize); ro.observe(cv); resize()
 
     const pitch = () => {
-      g.fillStyle = "#0b2a1b"; g.fillRect(0, 0, W, H)
-      for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.05)"; g.fillRect((i * W) / 12, 0, W / 12, H) }
-      g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 1.2; g.strokeRect(1, 1, W - 2, H - 2)
-      g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.stroke()
-      g.beginPath(); g.arc(W / 2, H / 2, M(9.15), 0, 7); g.stroke()
-      const bh = (H * 40.3) / 68, sh = (H * 18.3) / 68
-      g.strokeRect(1, H / 2 - bh / 2, M(16.5), bh); g.strokeRect(1, H / 2 - sh / 2, M(5.5), sh)
-      g.strokeRect(W - 1 - M(16.5), H / 2 - bh / 2, M(16.5), bh); g.strokeRect(W - 1 - M(5.5), H / 2 - sh / 2, M(5.5), sh)
+      g.fillStyle = "#0b2a1b"; g.fillRect(0, 0, W, Hp)
+      for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.05)"; g.fillRect((i * W) / 12, 0, W / 12, Hp) }
+      g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 1.2; g.strokeRect(1, 1, W - 2, Hp - 2)
+      g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, Hp); g.stroke()
+      g.beginPath(); g.arc(W / 2, Hp / 2, M(9.15), 0, 7); g.stroke()
+      const bh = (Hp * 40.3) / 68, sh = (Hp * 18.3) / 68
+      g.strokeRect(1, Hp / 2 - bh / 2, M(16.5), bh); g.strokeRect(1, Hp / 2 - sh / 2, M(5.5), sh)
+      g.strokeRect(W - 1 - M(16.5), Hp / 2 - bh / 2, M(16.5), bh); g.strokeRect(W - 1 - M(5.5), Hp / 2 - sh / 2, M(5.5), sh)
     }
 
     const control = (pos: number[][]) => {
@@ -157,7 +160,7 @@ export function PitchCanvas(props: Props) {
     }
     const fit = (psi: number) => {
       F = 1; CX = 0; CY = 0
-      const pts = [[-52.5, -34, 0], [52.5, -34, 0], [52.5, 34, 0], [-52.5, 34, 0], [-52.5, 0, 6], [52.5, 0, 6]]
+      const pts = [[-52.5, -34, 0], [52.5, -34, 0], [52.5, 34, 0], [-52.5, 34, 0], [-52.5, 0, 6], [52.5, 0, 6], [-40, -44, 0], [40, -44, 0]]
       const pr = pts.map((p) => project(p[0], p[1], p[2], psi))
       const xs = pr.map((p) => p[0]), ys = pr.map((p) => p[1])
       const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
@@ -188,10 +191,11 @@ export function PitchCanvas(props: Props) {
       const psi = cam.psi + (cam.dragged ? 0 : 0.09 * Math.sin(ts / 3500))
       fit(psi)
       // backdrop
-      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#050914"); bg.addColorStop(1, "#0a1a2b")
+      const dark = document.documentElement.classList.contains("dark")
+      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, dark ? "#050914" : "#e6f0fb"); bg.addColorStop(1, dark ? "#0a1a2b" : "#c9dcf0")
       g.fillStyle = bg; g.fillRect(0, 0, W, H)
       const glow = project(0, 0, 0, psi); const rg = g.createRadialGradient(glow[0], glow[1], 10, glow[0], glow[1], W * 0.7)
-      rg.addColorStop(0, "rgba(56,189,248,.16)"); rg.addColorStop(1, "rgba(56,189,248,0)"); g.fillStyle = rg; g.fillRect(0, 0, W, H)
+      rg.addColorStop(0, dark ? "rgba(56,189,248,.16)" : "rgba(56,189,248,.28)"); rg.addColorStop(1, "rgba(56,189,248,0)"); g.fillStyle = rg; g.fillRect(0, 0, W, H)
       // slab sides
       const cs = [[-52.5, -34], [52.5, -34], [52.5, 34], [-52.5, 34]]
       for (let i = 0; i < 4; i++) {
@@ -276,6 +280,7 @@ export function PitchCanvas(props: Props) {
         drawBall(bp[0], bp[1], br, (curBall[0] + curBall[1]) * 0.12)
         holderMarks(ts, fr, codes, names, (t, n) => heads[t * 11 + n], [bp[0], bp[1], br], 24)
       }
+      drawBench3D(ts, psi)
       goal3(-gFar, psi)
     }
 
@@ -292,6 +297,116 @@ export function PitchCanvas(props: Props) {
     cv.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp); cv.addEventListener("dblclick", onDbl)
     cv.addEventListener("pointerdown", onDown)
 
+    // ---------- technical areas: dugouts, coaches, subs ----------
+    const benchHeads: { x: number; y: number; r: number; pick: NonNullable<BenchPick> }[] = []
+    const token = (x: number, y: number, r: number, fill: string, stroke: string, label: string, alpha = 1, ink = "#04121c") => {
+      g.save(); g.globalAlpha = alpha
+      g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = fill; g.fill(); g.lineWidth = 1.5; g.strokeStyle = stroke; g.stroke()
+      if (label) { g.fillStyle = ink; g.font = `700 ${Math.max(7, Math.round(r))}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(label, x, y + 0.5) }
+      g.restore()
+    }
+    const coachX = [-1, -1]
+    const bounce = (fr: Frames, code: string) => {
+      const dt = fr.goal && fr.goal.team === code ? performance.now() - fr.goal.at : 1e9
+      return dt < 2600 ? Math.abs(Math.sin(dt / 150)) * 7 * (1 - dt / 2600) : 0
+    }
+    const subRole = (st: Staff, i: number, state: "seat" | "warm" | "used") =>
+      `Substitute #${st.subs[i].number} · ${state === "warm" ? "warming up" : state === "used" ? "now on the pitch" : st.subs[i].pos}`
+
+    const drawBench2D = (ts: number) => {
+      const { staff, bench, codes, frames } = live.current
+      const fr = frames.current, top = Hp, strip = H - Hp
+      const gr = g.createLinearGradient(0, top, 0, H); gr.addColorStop(0, "#0a2417"); gr.addColorStop(1, "#06150d")
+      g.fillStyle = gr; g.fillRect(0, top, W, strip)
+      g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 1.2; g.beginPath(); g.moveTo(0, top); g.lineTo(W, top); g.stroke()
+      benchHeads.length = 0
+      const rs = Math.max(4.5, Math.min(7, strip * 0.2))
+      for (let t = 0; t < 2; t++) {
+        const st = staff[t]; if (!st) continue
+        const x0 = (t ? 0.54 : 0.05) * W, x1 = (t ? 0.95 : 0.46) * W, col = TEAM_COLORS[t], b = bench[codes[t]] ?? { warming: [], used: [] }
+        g.fillStyle = "rgba(255,255,255,.06)"; g.strokeStyle = col + "88"; g.lineWidth = 1.2
+        g.beginPath(); g.roundRect(x0, top + strip * 0.5, x1 - x0, strip * 0.46, 6); g.fill(); g.stroke()
+        g.font = "700 8px system-ui"; g.textAlign = "left"; g.textBaseline = "alphabetic"; g.fillStyle = col; g.fillText(`${codes[t]} BENCH`, x0 + 4, top + strip * 0.5 - 3)
+        const n = st.subs.length
+        st.subs.forEach((sb, i) => {
+          const sx = x0 + 10 + ((i + 0.5) * (x1 - x0 - 20)) / n, sy = top + strip * 0.74
+          if (b.warming.includes(i)) {
+            const jx = (x0 + x1) / 2 + Math.sin(ts / 500 + t * 2) * (x1 - x0) * 0.34, jy = top + strip * 0.26
+            token(sx, sy, rs, "transparent", col + "66", "", 0.6)
+            token(jx, jy, rs, col, "#fff", String(sb.number))
+            g.font = "800 7px system-ui"; g.textAlign = "center"; g.fillStyle = "#e2e8f0"; g.fillText("WARM-UP", jx, jy - rs - 3)
+            benchHeads.push({ x: jx, y: jy, r: rs + 5, pick: { team: t, name: sb.name, role: subRole(st, i, "warm") } })
+          } else if (b.used.includes(i)) {
+            token(sx, sy, rs, "#64748b", "#94a3b8", "", 0.25)
+            benchHeads.push({ x: sx, y: sy, r: rs + 3, pick: { team: t, name: sb.name, role: subRole(st, i, "used") } })
+          } else {
+            token(sx, sy, rs, col, "#ffffffaa", String(sb.number), 0.62)
+            benchHeads.push({ x: sx, y: sy, r: rs + 3, pick: { team: t, name: sb.name, role: subRole(st, i, "seat") } })
+          }
+        })
+        // coaching staff stand on the technical-area line; the head coach shadows the ball along the touchline
+        const target = x0 + 16 + (x1 - x0 - 32) * (fr.ball[0] / 100)
+        coachX[t] = coachX[t] < 0 ? target : coachX[t] + (target - coachX[t]) * 0.06
+        const cy = top + strip * 0.3, lift = bounce(fr, codes[t])
+        st.assistants.forEach((nm, k) => {
+          const ax = k === 0 ? x0 + 14 : x1 - 14
+          token(ax, cy, rs * 0.95, "#1e293b", "#cbd5e1", "AC", 1, "#e2e8f0")
+          benchHeads.push({ x: ax, y: cy, r: rs + 4, pick: { team: t, name: nm, role: "Assistant coach" } })
+        })
+        token(coachX[t], cy - lift, rs * 1.2, "#0f172a", "#fbbf24", "HC", 1, "#fbbf24")
+        benchHeads.push({ x: coachX[t], y: cy - lift, r: rs + 6, pick: { team: t, name: st.coach, role: "Head coach" } })
+      }
+      g.beginPath(); g.roundRect(W / 2 - 16, top + strip * 0.34, 32, strip * 0.34, 4); g.fillStyle = "rgba(255,255,255,.12)"; g.fill()
+      g.font = "700 7px system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#cbd5e1"; g.fillText("4TH OFFICIAL", W / 2, top + strip * 0.51)
+    }
+
+    const stand3 = (wx: number, wy: number, headZ: number, psi: number, fill: string, stroke: string, label: string, ink: string, alpha = 1, sc = 1) => {
+      const gp = project(wx, wy, 0, psi), hd = project(wx, wy, headZ, psi), r = Math.max(4.5, 1.7 * gp[3] * sc)
+      g.save(); g.globalAlpha = alpha
+      g.fillStyle = "rgba(0,0,0,.35)"; g.beginPath(); g.ellipse(gp[0], gp[1], r * 1.1, r * 0.45, 0, 0, 7); g.fill()
+      g.strokeStyle = stroke + "aa"; g.lineWidth = 1.6; g.beginPath(); g.moveTo(gp[0], gp[1]); g.lineTo(hd[0], hd[1]); g.stroke()
+      g.beginPath(); g.arc(hd[0], hd[1], r, 0, 7); g.fillStyle = fill; g.fill(); g.lineWidth = 1.4; g.strokeStyle = stroke; g.stroke()
+      if (label) { g.fillStyle = ink; g.font = `700 ${Math.max(7, Math.round(r))}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(label, hd[0], hd[1] + 0.5) }
+      g.restore()
+      return [hd[0], hd[1], r]
+    }
+
+    const drawBench3D = (ts: number, psi: number) => {
+      const { staff, bench, codes, frames } = live.current
+      const fr = frames.current
+      benchHeads.length = 0
+      for (let t = 0; t < 2; t++) {
+        const st = staff[t]; if (!st) continue
+        const xc = t ? 24 : -24, half = 15, col = TEAM_COLORS[t], b = bench[codes[t]] ?? { warming: [], used: [] }
+        poly([project(xc - half, -37, 0, psi), project(xc + half, -37, 0, psi), project(xc + half, -43, 0, psi), project(xc - half, -43, 0, psi)], col + "22", col + "99", 1.2)
+        poly([project(xc - half, -43, 0, psi), project(xc + half, -43, 0, psi), project(xc + half, -43, 3.2, psi), project(xc - half, -43, 3.2, psi)], col + "16", col + "66", 1)
+        poly([project(xc - half, -40.2, 0.9, psi), project(xc + half, -40.2, 0.9, psi), project(xc + half, -41.6, 0.9, psi), project(xc - half, -41.6, 0.9, psi)], "rgba(148,163,184,.45)")
+        const n = st.subs.length
+        st.subs.forEach((sb, i) => {
+          const sx = xc - half + 1.8 + (i * (2 * half - 3.6)) / (n - 1)
+          if (b.warming.includes(i)) {
+            const jx = xc + Math.sin(ts / 500 + t * 2) * half * 0.9
+            const h = stand3(jx, -35.4, 3.2, psi, col, "#fff", String(sb.number), "#04121c")
+            g.font = "800 8px system-ui"; g.textAlign = "center"; g.fillStyle = "#e2e8f0"; g.fillText("WARM-UP", h[0], h[1] - h[2] - 3)
+            benchHeads.push({ x: h[0], y: h[1], r: h[2] + 5, pick: { team: t, name: sb.name, role: subRole(st, i, "warm") } })
+          } else {
+            const used = b.used.includes(i)
+            const h = stand3(sx, -40.9, 2.6, psi, used ? "#64748b" : col, used ? "#94a3b8" : "#ffffffaa", used ? "" : String(sb.number), "#04121c", used ? 0.3 : 0.75, 0.85)
+            benchHeads.push({ x: h[0], y: h[1], r: h[2] + 3, pick: { team: t, name: sb.name, role: subRole(st, i, used ? "used" : "seat") } })
+          }
+        })
+        const target = xc - half + 3 + (2 * half - 6) * (fr.ball[0] / 100)
+        coachX[t] = coachX[t] < 0 ? target : coachX[t] + (target - coachX[t]) * 0.06
+        const lift = bounce(fr, codes[t]) * 0.35
+        const ch = stand3(coachX[t], -35.6, 3.6 + lift, psi, "#0f172a", "#fbbf24", "HC", "#fbbf24", 1, 1.15)
+        benchHeads.push({ x: ch[0], y: ch[1], r: ch[2] + 6, pick: { team: t, name: st.coach, role: "Head coach" } })
+        st.assistants.forEach((nm, k) => {
+          const ah = stand3(xc + (k === 0 ? -half + 1.5 : half - 1.5), -36.2, 3.4, psi, "#1e293b", "#cbd5e1", "AC", "#e2e8f0")
+          benchHeads.push({ x: ah[0], y: ah[1], r: ah[2] + 5, pick: { team: t, name: nm, role: "Assistant coach" } })
+        })
+      }
+    }
+
     const draw = (ts: number) => {
       const { frames, tactics, codes, names, layers, focus, selected } = live.current
       const fr = frames.current
@@ -306,9 +421,9 @@ export function PitchCanvas(props: Props) {
         curBall[0] += (fr.ball[0] - curBall[0]) * kb; curBall[1] += (fr.ball[1] - curBall[1]) * kb
       }
       if (live.current.view3d) { draw3D(ts, cur, curBall); raf = requestAnimationFrame(draw); return }
-      pitch()
+      pitch(); drawBench2D(ts)
       if (cur && fr.target) {
-        if (layers.includes("control")) { control(cur); g.imageSmoothingEnabled = true; g.drawImage(ctrl, 0, 0, W, H) }
+        if (layers.includes("control")) { control(cur); g.imageSmoothingEnabled = true; g.drawImage(ctrl, 0, 0, W, Hp) }
         if (layers.includes("shape")) [0, 1].forEach((t) => {
           const pts: number[][] = []
           for (let n = 1; n < 11; n++) pts.push([X(cur![t * 11 + n][0]), Y(cur![t * 11 + n][1])])
@@ -345,9 +460,13 @@ export function PitchCanvas(props: Props) {
     raf = requestAnimationFrame(draw)
 
     const pick = (e: PointerEvent) => {
-      if (!cur || mouse.moved > 6) return
+      if (mouse.moved > 6) return
       const rect = cv.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top
+      const hit = benchHeads.find((h) => Math.hypot(h.x - mx, h.y - my) <= h.r + 4)
+      if (hit) { live.current.onBench(hit.pick); return }
+      live.current.onBench(null)
       let best: Selected = null, bd = 28
+      if (!cur) return
       for (let i = 0; i < 22; i++) { const d = Math.hypot(heads[i][0] - mx, heads[i][1] - my); if (d < bd) { bd = d; best = { team: i < 11 ? 0 : 1, idx: i % 11 } } }
       live.current.onSelect(best)
     }
@@ -355,5 +474,5 @@ export function PitchCanvas(props: Props) {
     return () => { cancelAnimationFrame(raf); ro.disconnect(); cv.removeEventListener("pointerup", pick); cv.removeEventListener("pointerdown", onDown); cv.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); cv.removeEventListener("dblclick", onDbl) }
   }, [])
 
-  return <canvas ref={ref} className={`block w-full touch-manipulation ${props.view3d ? "aspect-[16/10] cursor-grab" : "aspect-[105/68]"}`} />
+  return <canvas ref={ref} className={`block w-full touch-manipulation ${props.view3d ? "aspect-[16/10] cursor-grab" : "aspect-[105/77.5]"}`} />
 }

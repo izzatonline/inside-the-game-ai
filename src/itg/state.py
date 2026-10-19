@@ -25,7 +25,19 @@ class TeamStats:
     goals: int = 0
     xg: float = 0.0
     tackles: int = 0
+    interceptions: int = 0
     pressures: int = 0
+    blocked: int = 0
+    off_target: int = 0
+    saves: int = 0
+    corners: int = 0
+    free_kicks: int = 0
+    throw_ins: int = 0
+    goal_kicks: int = 0
+    fouls: int = 0
+    yellow: int = 0
+    offsides: int = 0
+    crosses: int = 0
 
 
 @dataclass
@@ -53,6 +65,9 @@ class MatchState:
         self.dominant: Optional[str] = None
         self._cooldown: Dict[str, float] = {}
         self._n = 0
+        self.goal_log: List[Dict[str, Any]] = []
+        self.card_log: List[Dict[str, Any]] = []
+        self.sub_log: List[Dict[str, Any]] = []
         from .generator import TEAMS  # rosters give the analyzer names only, never roles
 
         self.tactics = TacticsAnalyzer(
@@ -110,6 +125,29 @@ class MatchState:
             return [self._moment(ev, d["kind"], d["importance"], d["player"], d["team"], **d["facts"])
                     for d in self.tactics.pop_moments()]
         self.tactics.observe(ev)
+        if ev.type == "warmup":
+            return out
+        if ev.type in ("restart", "foul", "card", "offside"):
+            ts0 = self.teams[ev.team]
+            if ev.type == "restart":
+                attr = {"corner": "corners", "free_kick": "free_kicks", "throw_in": "throw_ins", "goal_kick": "goal_kicks"}.get(ev.meta["kind"])
+                if attr:
+                    setattr(ts0, attr, getattr(ts0, attr) + 1)
+            elif ev.type == "foul":
+                ts0.fouls += 1
+            elif ev.type == "offside":
+                ts0.offsides += 1
+            else:
+                ts0.yellow += 1
+                self.card_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player, "card": "yellow"})
+                return [self._moment(ev, "card", 0.6, ev.player, ev.team, card="yellow")]
+            return out
+        if ev.type == "substitution":
+            self.tactics.rosters[ev.team][ev.meta["slot"]] = ev.player  # roles now belong to the new player
+            self.sub_log.append({"minute": ev.minute, "team": ev.team, "slot": ev.meta["slot"], "player_in": ev.player,
+                                 "player_out": ev.meta["player_out"], "number": ev.meta["number"]})
+            return [self._moment(ev, "substitution", 0.6, ev.player, ev.team,
+                                 player_in=ev.player, player_out=ev.meta["player_out"])]
         if ev.type in ("kickoff", "fulltime"):
             return out
         ts = self.teams[ev.team]
@@ -127,6 +165,8 @@ class MatchState:
                 self.last_pass = (ev.player, ev.team, ev.t)
             if ev.x >= 67:
                 weight = 1.0
+            if abs(ev.y - 50) >= 36 and ev.x >= 70:
+                ts.crosses += 1
             diff = ev.meta.get("difficulty", 0)
             if ok and diff >= 0.8 and self._ready("hardpass:" + ev.player, 900):
                 out.append(self._moment(
@@ -152,9 +192,18 @@ class MatchState:
             ps.xg += xg
             if ev.outcome in ("goal", "saved"):
                 ts.on_target += 1
+            if ev.outcome == "saved":
+                self.teams[self._opp(ev.team)].saves += 1
+            elif ev.outcome == "blocked":
+                ts.blocked += 1
+            elif ev.outcome == "off_target":
+                ts.off_target += 1
             weight = 2 + 6 * xg
         elif ev.type in ("tackle", "interception"):
-            ts.tackles += 1
+            if ev.type == "tackle":
+                ts.tackles += 1
+            else:
+                ts.interceptions += 1
             if ev.x >= 55:
                 weight = 1.5
         elif ev.type == "pressure":
@@ -187,6 +236,8 @@ class MatchState:
                     and self.last_pass[0] != ev.player:
                 assist = self.last_pass[0]
             home, away = self.codes
+            self.goal_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player,
+                                  "score_home": self.teams[home].goals, "score_away": self.teams[away].goals})
             return [self._moment(
                 ev, "goal", 1.0, ev.player, ev.team,
                 xg=xg, xg_pct=int(round(xg * 100)), shot_speed=int(ev.meta["speed_kmh"]),
@@ -239,6 +290,10 @@ class MatchState:
                     "on_target": s.on_target,
                     "xg": round(s.xg, 2),
                     "pass_acc_pct": int(round(100 * s.passes_ok / s.passes)) if s.passes else 0,
+                    "passes": s.passes, "shots_off": s.off_target, "shots_blocked": s.blocked, "saves": s.saves,
+                    "corners": s.corners, "free_kicks": s.free_kicks, "throw_ins": s.throw_ins, "goal_kicks": s.goal_kicks,
+                    "fouls": s.fouls, "yellow": s.yellow, "offsides": s.offsides, "crosses": s.crosses,
+                    "tackles": s.tackles, "interceptions": s.interceptions, "pressures": s.pressures,
                 }
                 for c, s in self.teams.items()
             },
