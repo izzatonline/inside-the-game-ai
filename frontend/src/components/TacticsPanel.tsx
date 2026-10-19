@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUpDown } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -79,7 +79,7 @@ export function TacticsPanel({ tactics, codes, selected, onSelect, subLog }: { t
                         className={`bg-muted/50 hover:bg-muted flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left ${sel ? "ring-2 ring-inset ring-amber-400" : ""}`}>
                         <span className="min-w-8 shrink-0 rounded px-1 text-center text-[10px] font-extrabold text-black" style={{ background: BADGE_COLORS[r.short] ?? "#cbd5e1" }}>{r.short}</span>
                         <span className="min-w-0 leading-tight"><span className="block truncate text-[13px]">{shortName(r.name)}</span><span className="text-muted-foreground block truncate text-[10px]">{r.role}</span></span>
-                        {sub && <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400" title={`Substitute: came on ${fmtMinute(sub.minute)}' for ${sub.player_out}`}><ArrowUp className="size-3" />{fmtMinute(sub.minute)}'</span>}
+                        {sub && <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400" title={`Substitute: came on ${fmtMinute(sub.minute)}' for ${sub.player_out}`}><ArrowUpDown className="size-3" />{fmtMinute(sub.minute)}'</span>}
                       </button>
                     )
                   })}

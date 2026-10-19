@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, ArrowUp, Box, ChevronDown, ChevronRight, ChevronUp, Info, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
+import { Activity, ArrowUpDown, Box, ChevronDown, ChevronRight, ChevronUp, Info, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { RolesLegend } from "@/components/RolesLegend"
@@ -80,7 +80,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
   const [layers, setLayers] = useState(["shape", "control", "roles"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
-  const [view3d, setView3d] = useState(params.get("view") === "3d")
+  const [view3d, setView3d] = useState(params.get("view") !== "2d")
   const { frames, stats, tactics, overlays, recap, toast, ball, series, goals, cards, subLog, bench, roster, paused, pause } = useMatchStream({ ...applied, match: matchId }, runId, cfg, startMin)
   const { toggleSidebar } = useSidebar()
   const [benchSel, setBenchSel] = useState<BenchPick>(null)
@@ -218,7 +218,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
           {benchSel && !sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
             <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-(--minute)">{benchSel.role}</div></div>}
           {sel && <div className="bg-background/90 max-w-full rounded-xl border px-3 py-2 text-sm backdrop-blur">
-            <b>{sel.name}</b> · {sel.team}{sel.sub && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"><ArrowUp className="size-3" />sub {fmtMinute(sel.sub.minute)}'</span>}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
+            <b>{sel.name}</b> · {sel.team}{sel.sub && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"><ArrowUpDown className="size-3" />sub {fmtMinute(sel.sub.minute)}'</span>}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
           </div>
         </div>
         <div className="hidden lg:block">{controls}</div>
