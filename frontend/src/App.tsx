@@ -145,7 +145,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           </CardContent>
             </Card>
           {mobile && <Button variant="outline" size="icon-lg" aria-label={pitchHidden ? "Show pitch" : "Hide pitch"} aria-expanded={!pitchHidden} onClick={() => setPitchHidden((h) => !h)}>{pitchHidden ? <ChevronDown /> : <ChevronUp />}</Button>}
-          <Button variant="outline" size="icon-lg" aria-label="Toggle day or night" className="hidden sm:inline-flex" onClick={() => setThemeMode(dark ? "light" : "dark")}>{dark ? <Sun /> : <Moon />}</Button>
+          <Button variant="outline" size="icon-lg" aria-label="Toggle light or dark mode" className="hidden sm:inline-flex" onClick={() => setThemeMode(dark ? "light" : "dark")}>{dark ? <Sun /> : <Moon />}</Button>
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>

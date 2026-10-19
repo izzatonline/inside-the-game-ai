@@ -10,7 +10,7 @@ import type { MatchInfo } from "@/lib/types"
 type Props = { matches: MatchInfo[]; matchId: string; onSelect: (id: string) => void; theme: ThemeMode; onTheme: (m: ThemeMode) => void }
 
 const NEXT: Record<ThemeMode, ThemeMode> = { system: "light", light: "dark", dark: "system" }
-const THEME_LABEL: Record<ThemeMode, string> = { system: "Match my device", light: "Day mode", dark: "Night mode" }
+const THEME_LABEL: Record<ThemeMode, string> = { system: "Match my device", light: "Light mode", dark: "Dark mode" }
 
 export function AppSidebar({ matches, matchId, onSelect, theme, onTheme }: Props) {
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : SunMoon

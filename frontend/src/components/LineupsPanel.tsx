@@ -43,7 +43,7 @@ export function LineupsPanel({ cfg, codes, tactics, subLog, cards, goals }: Prop
               <text x={n.x} y={n.y + 5.6} textAnchor="middle" fontSize={2.1} fontWeight={700} fill="#fff" stroke="#06150d" strokeWidth={0.45} paintOrder="stroke">{surname(n.name)}</text>
               {n.subbed && <g><circle cx={n.x + 3} cy={n.y - 2.8} r={1.5} fill="#e11d48" /><path d={`M ${n.x + 3} ${n.y - 3.6} L ${n.x + 3} ${n.y - 2} M ${n.x + 2.3} ${n.y - 2.6} L ${n.x + 3} ${n.y - 1.9} L ${n.x + 3.7} ${n.y - 2.6}`} stroke="#fff" strokeWidth={0.3} fill="none" /></g>}
               {n.booked && <rect x={n.x - 4.3} y={n.y - 4.5} width={1.8} height={2.6} rx={0.3} fill="#facc15" />}
-              {n.scored > 0 && <text x={n.x + 3.2} y={n.y + 3.6} fontSize={2.6}>⚽{n.scored > 1 ? n.scored : ""}</text>}
+              {n.scored > 0 && <g><circle cx={n.x + 2.7} cy={n.y + 1.9} r={1.5} fill="#fff" stroke="#06150d" strokeWidth={0.25} /><text x={n.x + 2.7} y={n.y + 2.65} textAnchor="middle" fontSize={2.1}>⚽</text>{n.scored > 1 && <text x={n.x + 4.6} y={n.y + 2.7} fontSize={2} fontWeight={800} fill="#fff" stroke="#06150d" strokeWidth={0.35} paintOrder="stroke">{n.scored}</text>}</g>}
             </g>
           ))}
         </svg>

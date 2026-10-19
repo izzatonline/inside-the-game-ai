@@ -32,7 +32,7 @@ export function SettingsSheet({ theme, onTheme, open, onOpenChange, cfg, value, 
           <SheetDescription>The same match, tailored to the viewer. Model: {cfg.llm} · orchestration: {cfg.orchestration}.</SheetDescription>
         </SheetHeader>
         <div className="grid gap-3 px-4 pb-4">
-          <Field id="theme" label="Appearance" value={theme} onValue={(v) => onTheme(v as ThemeMode)} items={[{ value: "system", label: "Match my device" }, { value: "light", label: "Day (light)" }, { value: "dark", label: "Night (dark)" }]} />
+          <Field id="theme" label="Appearance" value={theme} onValue={(v) => onTheme(v as ThemeMode)} items={[{ value: "system", label: "Match my device" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
           <Field id="mode" label="View" value={value.mode} onValue={set("mode")} items={[{ value: "casual", label: "Casual fan" }, { value: "analyst", label: "Analyst" }]} />
           <Field id="lang" label="Language" value={value.lang} onValue={set("lang")} items={Object.entries(cfg.languages).map(([v, label]) => ({ value: v, label }))} />
           <Field id="team" label="Favourite club" value={value.team} onValue={set("team")} items={[{ value: "", label: "Neutral" }, ...codes.map((c) => ({ value: c, label: cfg.teams[c].name }))]} />
