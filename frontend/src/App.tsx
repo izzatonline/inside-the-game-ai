@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, Box, ChevronDown, ChevronUp, Moon, PanelLeft, Settings2, Sun } from "lucide-react"
+import { Activity, Box, ChevronDown, ChevronUp, Info, Moon, PanelLeft, Settings2, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
+import { RolesLegend } from "@/components/RolesLegend"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
 import { TimeScrubber } from "@/components/TimeScrubber"
@@ -90,6 +91,9 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const mobile = useIsMobile()
   const { mode: themeMode, setMode: setThemeMode, dark } = theme
   const [momentumOpen, setMomentumOpen] = useState(false)
+  const [legendOpen, setLegendOpen] = useState(false)
+  const [jump, setJump] = useState(0)
+  const [hint, setHint] = useState(() => { try { return !localStorage.getItem("itg-hint-seen") } catch { return false } })
   const [pitchHidden, setPitchHidden] = useState(false)
   const hidePitch = mobile && pitchHidden
   const pitchBox = useRef<HTMLDivElement>(null)
@@ -118,6 +122,13 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const sel = selected ? { name: (roster[codes[selected.team]] ?? cfg.teams[codes[selected.team]].players)[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
   const shape = codes.map((c, i) => ({ c, i, p: tactics[c] })).filter((x) => x.p)
 
+  const nowMin = Math.floor((stats?.t ?? startMin * 60) / 60)
+  const canJump = applied.src !== "live"
+  const dismissHint = () => { setHint(false); try { localStorage.setItem("itg-hint-seen", "1") } catch { /* private mode */ } }
+  const openTimeline = () => { setJump(nowMin); setMomentumOpen(true); dismissHint() }
+  const doJump = (m: number) => { setStartMin(m); setRunId((n) => n + 1); setSelected(null); setBenchSel(null); setMomentumOpen(false) }
+  useEffect(() => { if (!hint) return; const t = setTimeout(dismissHint, 9000); return () => clearTimeout(t) }, [hint])
+
   const controls = (
     <>
 <div className="mt-2 flex max-w-full items-center gap-3 overflow-x-auto pb-1">
@@ -129,6 +140,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           <ToggleGroup multiple value={focus} onValueChange={setFocus} variant="outline" size="sm" spacing={1}>
             {codes.map((c) => <ToggleGroupItem key={c} value={c}>{c}</ToggleGroupItem>)}
           </ToggleGroup>
+          <Button variant="ghost" size="icon-sm" aria-label="What do the role badges mean?" title="What do the role badges mean?" onClick={() => setLegendOpen(true)}><Info /></Button>
         </div>
         <div className="text-muted-foreground mt-1.5 flex flex-wrap gap-x-4 text-xs">
           {shape.map(({ c, i, p }) => <span key={c} className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: TEAM_COLORS[i] }} /><b className="text-foreground">{p.formation}</b> {p.primary}</span>)}
@@ -143,7 +155,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           onPointerLeave={(e) => { if (e.pointerType === "mouse" && !dragging) setScrub(false) }}>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
-          <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
+          <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={openTimeline} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openTimeline() }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
             <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
@@ -157,6 +169,11 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
         <div className="-mb-1 cursor-pointer py-2" onClick={() => setScrub((o) => !o)} title="Jump to a minute">
           <div className="h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         </div>
+        {hint && canJump && !scrub && (
+          <button onClick={dismissHint} className="bg-foreground text-background animate-in fade-in slide-in-from-top-1 absolute top-full left-1/2 z-40 mt-0.5 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-medium whitespace-nowrap shadow-lg">
+            Tip: tap the score to jump to any minute ✕
+          </button>
+        )}
         {applied.src !== "live" && <TimeScrubber open={scrub} value={Math.floor((stats?.t ?? startMin * 60) / 60)} max={cfg.match.duration_min}
           onDragging={setDragging} onCommit={(m) => { setStartMin(m); setRunId((n) => n + 1); setSelected(null); setBenchSel(null) }} />}
       </div>
@@ -212,11 +229,29 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
       </div>
       <Dialog open={momentumOpen} onOpenChange={setMomentumOpen}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Match momentum</DialogTitle><DialogDescription>Who was on top, minute by minute.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Match timeline</DialogTitle>
+            <DialogDescription>{canJump ? "See who was on top minute by minute, then jump to any moment." : "Who was on top, minute by minute. Jumping is only available in replay mode."}</DialogDescription>
+          </DialogHeader>
           <MomentumChart series={series} goals={goals} cards={cards} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
-            score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
+            score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0}
+            max={cfg.match.duration_min} playhead={canJump ? jump : null} onPick={canJump ? setJump : undefined} />
+          {canJump && (
+            <div className="space-y-2.5">
+              {goals.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-muted-foreground text-xs">Jump to a goal:</span>
+                  {goals.map((g, i) => (
+                    <button key={i} onClick={() => setJump(Math.max(0, g.minute - 1))} className="bg-muted hover:bg-muted/70 rounded-full px-2.5 py-1 text-xs">⚽ {fmtMinute(g.minute)}' {g.player ? g.player.split(" ").slice(-1)[0] : ""}</button>
+                  ))}
+                </div>
+              )}
+              <Button className="w-full" onClick={() => doJump(jump)}>Jump to {fmtMinute(jump)}'</Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
+      <RolesLegend open={legendOpen} onOpenChange={setLegendOpen} />
       <SettingsSheet theme={themeMode} onTheme={setThemeMode} open={open} onOpenChange={setOpen} cfg={cfg} value={draft} onChange={setDraft} onApply={apply} />
     </div>
   )

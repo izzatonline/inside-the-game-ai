@@ -23,7 +23,7 @@ PRESS_PPDA, PASSIVE_PPDA = 3.0, 6.0  # PPDA-like: opponent passes per defensive 
 ROLE_SHORT = {
     "Goalkeeper": "GK", "Centre-back": "CB", "Full-back": "FB", "Inverted full-back": "IFB",
     "Overlapping full-back": "OFB", "Holding midfielder": "DM", "Double pivot": "DM",
-    "Box-to-box midfielder": "B2B", "Advanced 8": "AM8", "Number 10": "#10", "Winger": "W",
+    "Box-to-box midfielder": "B2B", "Advanced 8": "A8", "Number 10": "CAM", "Winger": "W",
     "Inverted winger": "IW", "Inside forward": "IF", "Striker": "ST",
 }
 FEATURED = {"Inverted full-back", "Overlapping full-back", "Inside forward", "Inverted winger"}
