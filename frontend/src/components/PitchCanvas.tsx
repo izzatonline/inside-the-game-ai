@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react"
 import type { Frames, Selected, TacticsMap } from "@/lib/types"
 import { BADGE_COLORS, TEAM_COLORS } from "@/lib/theme"
+import { isDeadBall, lastName, phaseLabel } from "@/lib/ball"
 
 type Props = {
   frames: React.MutableRefObject<Frames>
   tactics: TacticsMap
   codes: string[]
+  names: string[][]
   layers: string[]
   focus: string[]
   selected: Selected
@@ -97,6 +99,36 @@ export function PitchCanvas(props: Props) {
       g.strokeStyle = "rgba(20,20,26,.85)"; g.lineWidth = Math.max(0.8, r * 0.07); g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke()
     }
 
+    // Who has the ball: solid ring + name (confirmed), dashed ring + "name?" (likely), dashed ring on the ball (unknown).
+    // Dead balls get a pulsing ring and a label that falls back from "Throw-in" to "Set piece" when unsure.
+    const pill = (text: string, x: number, y: number, color: string) => {
+      g.font = "700 9px system-ui"; g.textAlign = "center"; g.textBaseline = "middle"
+      const w = g.measureText(text).width + 10
+      g.fillStyle = "rgba(7,11,20,.88)"; g.beginPath(); g.roundRect(x - w / 2, y - 7, w, 14, 7); g.fill()
+      g.fillStyle = color; g.fillText(text, x, y + 0.5)
+    }
+    const holderMarks = (ts: number, fr: Frames, codes: string[], names: string[][], at: (t: number, n: number) => number[], ballPt: number[], tagLift: number) => {
+      const pulse = 1 + Math.sin(ts / 220) * 0.1, amber = "#fbbf24"
+      const t = codes.indexOf(fr.holder ? fr.holder[0] : fr.poss)
+      if (fr.holder && fr.band > 0) {
+        const [x, y, r] = at(t, fr.holder[1])
+        g.save(); g.lineWidth = 2.4; g.strokeStyle = amber
+        if (fr.band === 1) g.setLineDash([3, 3])
+        g.beginPath(); g.arc(x, y, (r + 5) * pulse, 0, 7); g.stroke(); g.restore()
+        pill(lastName(names[t]?.[fr.holder[1]] ?? "") + (fr.band === 1 ? "?" : ""), x, y - r - tagLift, amber)
+      } else {
+        g.save(); g.setLineDash([3, 3]); g.lineWidth = 1.8; g.strokeStyle = TEAM_COLORS[Math.max(0, t)]
+        g.beginPath(); g.arc(ballPt[0], ballPt[1], ballPt[2] + 7 * pulse, 0, 7); g.stroke(); g.restore()
+      }
+      const label = phaseLabel(fr.phase, fr.phaseBand)
+      if (label) {
+        if (isDeadBall(fr.phase)) {
+          g.save(); g.lineWidth = 2; g.strokeStyle = TEAM_COLORS[Math.max(0, t)] + "cc"; g.beginPath(); g.arc(ballPt[0], ballPt[1], ballPt[2] + 10 * pulse, 0, 7); g.stroke(); g.restore()
+        }
+        pill(label.toUpperCase(), ballPt[0], ballPt[1] + ballPt[2] + 14, "#e2e8f0")
+      }
+    }
+
     // Ball path: separate arrows for the last touches, newest bright, oldest nearly gone
     const arrow = (x0: number, y0: number, x1: number, y1: number, a: number) => {
       const ang = Math.atan2(y1 - y0, x1 - x0), w = 1.4 + 2.2 * a, hs = 4 + 5 * a
@@ -151,7 +183,7 @@ export function PitchCanvas(props: Props) {
     }
 
     const draw3D = (ts: number, cur: number[][] | null, curBall: number[]) => {
-      const { tactics, codes, layers, focus, selected, frames } = live.current
+      const { tactics, codes, names, layers, focus, selected, frames } = live.current
       const fr = frames.current
       const psi = cam.psi + (cam.dragged ? 0 : 0.09 * Math.sin(ts / 3500))
       fit(psi)
@@ -242,6 +274,7 @@ export function PitchCanvas(props: Props) {
         g.fillStyle = "rgba(0,0,0,.4)"; g.beginPath(); g.ellipse(bg2[0], bg2[1], br * 1.1, br * 0.5, 0, 0, 7); g.fill()
         g.beginPath(); g.arc(bp[0], bp[1], br + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.22)"; g.fill()
         drawBall(bp[0], bp[1], br, (curBall[0] + curBall[1]) * 0.12)
+        holderMarks(ts, fr, codes, names, (t, n) => heads[t * 11 + n], [bp[0], bp[1], br], 24)
       }
       goal3(-gFar, psi)
     }
@@ -260,7 +293,7 @@ export function PitchCanvas(props: Props) {
     cv.addEventListener("pointerdown", onDown)
 
     const draw = (ts: number) => {
-      const { frames, tactics, codes, layers, focus, selected } = live.current
+      const { frames, tactics, codes, names, layers, focus, selected } = live.current
       const fr = frames.current
       const dt = Math.min(0.1, (ts - last) / 1000 || 0.016); last = ts
       g.clearRect(0, 0, W, H)
@@ -305,6 +338,7 @@ export function PitchCanvas(props: Props) {
         const brr = Math.max(5.5, r * 0.85)
         g.beginPath(); g.arc(bx, by, brr + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.22)"; g.fill()
         drawBall(bx, by, brr, (curBall[0] + curBall[1]) * 0.12)
+        holderMarks(ts, fr, codes, names, (t, n) => heads[t * 11 + n], [bx, by, brr], 12)
       }
       raf = requestAnimationFrame(draw)
     }

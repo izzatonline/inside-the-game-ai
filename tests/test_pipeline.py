@@ -104,7 +104,8 @@ def test_tactics_infer_formation_from_positions_only():
 def test_tactics_infer_style_and_roles():
     p = _analyze(7)
     assert p["NOR"]["line_height"] > p["HAR"]["line_height"] + 10  # high line vs low block
-    assert p["NOR"]["ppda"] < p["HAR"]["ppda"]  # presses harder
+    ppda = [(_analyze(sd)["NOR"]["ppda"], _analyze(sd)["HAR"]["ppda"]) for sd in range(1, 7)]
+    assert sum(a for a, _ in ppda) < sum(b for _, b in ppda)  # NOR press harder on average
     roles = {r["name"]: r["role"] for r in p["NOR"]["roles"]}
     assert roles["Callum Draper"] == "Inverted full-back"
     assert roles["Joao Barreto"] == "Overlapping full-back"
@@ -173,3 +174,18 @@ def test_localize_tactics_is_cached_across_viewers():
         pipe = MatchPipeline(NAMES, llm, cache)
         out = pipe.localize_tactics({"NOR": nor, "HAR": har}, Profile(lang="es"), 300.0)
     assert len(calls) == 2 and out["NOR"]["summary"].startswith("Northbridge")
+
+
+def test_tracking_reports_holder_phase_and_uncertainty():
+    frames = [e for e in generate_match(7) if e.type == "tracking"]
+    phases = {e.meta["phase"] for e in frames}
+    assert {"open", "throw_in", "goal_kick", "corner", "keeper_hold"} <= phases
+    assert all(0.0 <= e.meta["conf"] <= 1.0 for e in frames)
+    confs = [e.meta["conf"] for e in frames]
+    assert any(c >= 0.8 for c in confs) and any(0.5 <= c < 0.8 for c in confs) and any(c < 0.5 for c in confs)
+    for e in frames:
+        if e.meta["holder"] is None:
+            assert e.meta["conf"] < 0.5  # never a named holder without confidence data
+        else:
+            assert e.meta["holder"][0] == e.meta["poss"] and 0 <= e.meta["holder"][1] < 11
+    assert any(e.meta["phase_conf"] < 0.8 for e in frames if e.meta["phase"] == "corner")

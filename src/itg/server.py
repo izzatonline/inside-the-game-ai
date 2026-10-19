@@ -42,8 +42,8 @@ async def _step(pipe, ev, profile, last_stats: float):
     out = []
     overlays = await asyncio.to_thread(pipe.process, ev, profile)
     if ev.type == "tracking":
-        out.append(_sse("frame", {"t": ev.t, "pos": ev.meta["pos"], "ball": ev.meta["ball"],
-                                  "poss": ev.meta["poss"]}))
+        out.append(_sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase", "phase_conf")}
+                        | {"t": ev.t}))
     tac = pipe.state.tactics.take_update()
     if tac:
         tac = await asyncio.to_thread(pipe.localize_tactics, tac, profile, ev.t)

@@ -23,5 +23,9 @@ export type Config = {
 export type Settings = {
   mode: string; lang: string; team: string; player: string; metric: string; src: string; speed: string; seed: string
 }
-export type Frames = { target: number[][] | null; ball: number[]; trail: number[][]; n: number; reset: boolean }
+export type Frames = {
+  target: number[][] | null; ball: number[]; trail: number[][]; n: number; reset: boolean
+  holder: [string, number] | null; band: 0 | 1 | 2; phase: string; phaseBand: 0 | 1 | 2; poss: string
+  lastConfirmed: { team: string; idx: number; at: number } | null
+}
 export type Selected = { team: number; idx: number } | null

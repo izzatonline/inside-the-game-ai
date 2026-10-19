@@ -73,6 +73,7 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 def _frame_positions(codes, t, poss, bx_rel, by_rel):
     """22 player positions (absolute 0-100 pitch frame; first team attacks +x) around the ball."""
     out = []
+    info = {"carrier": 1, "gap": 99.0, "opp_gap": 99.0}
     for c in codes:
         tac, slots = TEAMS[c]["tactic"], TEAMS[c]["slots"]
         has = c == poss
@@ -88,19 +89,25 @@ def _frame_positions(codes, t, poss, bx_rel, by_rel):
             px += 1.2 * math.sin(t / 9 + i * 1.7)
             py += 1.2 * math.cos(t / 11 + i * 2.3)
             pts.append([px, py])
-        near = sorted(range(1, 11), key=lambda i: math.hypot((pts[i][0] - bx) * 1.05, (pts[i][1] - by) * 0.68))
+        def dm(i):
+            return math.hypot((pts[i][0] - bx) * 1.05, (pts[i][1] - by) * 0.68)
+
+        near = sorted(range(1, 11), key=dm)
         if has:
-            pts[near[0]] = [bx, by]
+            cand = sorted(range(0 if bx < 10 else 1, 11), key=dm)  # the keeper can hold it deep
+            info["carrier"], info["gap"] = cand[0], dm(cand[1])
+            pts[cand[0]] = [bx, by]
         else:
             for i in near[:2]:  # the pressing pair close the ball down
                 k = 0.55 * tac["press"]
                 pts[i] = [pts[i][0] + (bx - pts[i][0]) * k, pts[i][1] + (by - pts[i][1]) * k]
+            info["opp_gap"] = min(dm(i) for i in range(11))
         for p in pts:
             p[0], p[1] = _clamp(p[0], 1, 99), _clamp(p[1], 1, 99)
         if c != codes[0]:  # away team is shown in the opposite direction
             pts = [[100 - px, 100 - py] for px, py in pts]
         out.extend([round(px, 1), round(py, 1)] for px, py in pts)
-    return out
+    return out, info
 
 
 def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = True) -> List[Event]:
@@ -121,12 +128,25 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         events.append(Event(next(ids), round(t, 1), type_, team, player,
                             round(x, 1), round(y, 1), outcome, meta))
 
-    def track(t_, poss_, x_, y_):
+    def track(t_, poss_, x_, y_, ph="open", phc=1.0, loose=False):
+        """One tracking frame. holder/conf/phase say who has the ball and what kind of play it is;
+        conf is lower when the ball is contested, plus a deterministic *simulated* tracker
+        occlusion so consumers must handle uncertain frames."""
         if not tracking:
             return
         bx, by = (x_, y_) if poss_ == codes[0] else (100 - x_, 100 - y_)
-        emit(t_, "tracking", poss_, "", x_, y_, pos=_frame_positions(codes, t_, poss_, x_, y_),
-             ball=[round(bx, 1), round(by, 1)], poss=poss_)
+        pos, info = _frame_positions(codes, t_, poss_, x_, y_)
+        occluded = (math.sin(t_ * 12.9898) * 43758.5453) % 1.0 < 0.18
+        if loose:
+            holder, conf = None, 0.0
+        else:
+            conf = (_clamp(0.35 + info["opp_gap"] / 5.0, 0.3, 0.98) if ph == "open"
+                    else _clamp(0.45 + info["gap"] / 6.0, 0.45, 0.97))
+            if occluded:
+                conf = min(conf, 0.6)
+            holder = [poss_, info["carrier"]]
+        emit(t_, "tracking", poss_, "", x_, y_, pos=pos, ball=[round(bx, 1), round(by, 1)], poss=poss_,
+             holder=holder, conf=round(conf, 2), phase=ph, phase_conf=phc)
 
     t, poss, x, y, pressured = 0.0, codes[0], 50.0, 50.0, False
     score = {c: 0 for c in codes}
@@ -143,6 +163,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         att, dfn = strength[poss] + boost[poss], strength[opp] + boost[opp]
         p_lose = _clamp(0.11 * dfn / att, 0.05, 0.3)
         r = rng.random()
+        ph, phc, loose = "open", 1.0, False
 
         if x >= 72 and rng.random() < 0.09:
             shooter = _pick(rng, poss, x)
@@ -156,20 +177,32 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
                 score[poss] += 1
             emit(t, "shot", poss, shooter, x, y, outcome, xg=xg, speed_kmh=speed,
                  distance_m=round(dist, 1), score=dict(score))
-            poss, pressured = opp, False
+            shooter_team, poss, pressured = poss, opp, False
             if outcome == "goal":
                 x = y = 50.0
                 emit(t + 40, "kickoff", poss, _pick(rng, poss, 50), 50, 50)
                 t += 40
+                ph = "kickoff"
+            elif outcome == "blocked" and len(events) % 2 == 0:
+                # deflected behind: the attackers keep the ball for a corner (touch not certain)
+                poss, x, y = shooter_team, 97.0, (4.0 if (len(events) // 2) % 2 else 96.0)
+                emit(t, "restart", poss, "", x, y, kind="corner")
+                ph, phc = "corner", 0.62
             else:
                 x, y = 8.0, 50.0
                 emit(t, "possession_change", poss, _pick(rng, poss, 8), x, y, cause="shot_" + outcome)
+                if outcome == "off_target":
+                    emit(t, "restart", poss, "", x, y, kind="goal_kick")
+                    ph, phc = "goal_kick", 0.95
+                elif outcome == "saved":
+                    ph, phc = "keeper_hold", 0.95
         elif r < p_lose:
             tackler = _pick(rng, opp, 100 - x)
             kind = "tackle" if rng.random() < 0.6 else "interception"
             emit(t, kind, opp, tackler, 100 - x, 100 - y, "won")
             poss, x, y, pressured = opp, 100 - x, 100 - y, False
             emit(t, "possession_change", poss, tackler, x, y, cause=kind)
+            loose = True  # the ball is up for grabs for a moment
         elif r < p_lose + 0.12 * (0.4 + TEAMS[opp]["tactic"]["press"]):
             emit(t, "pressure", opp, _pick(rng, opp, 100 - x), 100 - x, 100 - y,
                  intensity=round(rng.uniform(0.3, 1.0), 2))
@@ -196,11 +229,16 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
                  speed_kmh=round(rng.uniform(35, 75) if dist > 20 else rng.uniform(20, 45), 0))
             if ok:
                 x, y = nx, ny
+            elif ny < 7 or ny > 93:  # ran out over the touchline: throw-in to the other side
+                poss, x, y = opp, 100 - nx, (97.0 if ny < 50 else 3.0)
+                emit(t, "possession_change", poss, "", x, y, cause="out_of_play")
+                emit(t, "restart", poss, "", x, y, kind="throw_in")
+                ph, phc = "throw_in", 0.92
             else:
                 poss, x, y = opp, 100 - nx, 100 - ny
                 emit(t, "possession_change", poss, _pick(rng, poss, x), x, y, cause="turnover")
             pressured = False
-        track(t, poss, x, y)
+        track(t, poss, x, y, ph, phc, loose)
 
     emit(duration, "fulltime", poss, "", x, y, score=dict(score))
     return events

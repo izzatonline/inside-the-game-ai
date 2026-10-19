@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
-import { Box, Settings2 } from "lucide-react"
+import { Activity, Box, Settings2 } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
+import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
 import { StatsPanel } from "@/components/StatsPanel"
@@ -8,12 +9,14 @@ import { TacticsPanel } from "@/components/TacticsPanel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useMatchStream } from "@/hooks/useMatchStream"
+import { describeBall } from "@/lib/ball"
 import { TEAM_COLORS } from "@/lib/theme"
 import type { Config, Selected, Settings } from "@/lib/types"
 
@@ -40,7 +43,8 @@ function Match({ cfg }: { cfg: Config }) {
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")
-  const { frames, stats, tactics, overlays, recap, status, toast } = useMatchStream(applied, runId)
+  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals } = useMatchStream(applied, runId)
+  const info = ball ? describeBall(ball, cfg, codes) : null
   const narrow = useMemo(() => window.innerWidth < 480, [])
 
   const apply = () => {
@@ -73,21 +77,34 @@ function Match({ cfg }: { cfg: Config }) {
     <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
       <div className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
-          <Card size="sm" className="flex-1"><CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
+          <Popover>
+            <PopoverTrigger render={<Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" aria-label="Show match momentum" />}>
+              <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="text-[11px] font-bold text-amber-400">{stats?.minute ?? 0}'</div></div>
+            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-400">{stats?.minute ?? 0}'<Activity className="text-muted-foreground size-3" /></div></div>
             <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
-          </CardContent></Card>
+          </CardContent>
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="center" sideOffset={8} className="w-[min(94vw,40rem)]">
+              <MomentumChart series={series} goals={goals} codes={codes} names={codes.map((c) => cfg.teams[c].name)}
+                score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         <div className="border-border relative overflow-hidden rounded-2xl border shadow-2xl">
-          <PitchCanvas frames={frames} tactics={tactics} codes={codes} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
+          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => cfg.teams[c].players)} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
-          {view3d && <Badge variant="outline" className="bg-background/70 absolute right-2 bottom-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
+          {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
+          {info && <div className="bg-background/85 absolute bottom-2 left-2 flex max-w-[75%] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs backdrop-blur" aria-live="polite">
+            <span className={`size-2 shrink-0 rounded-full ${info.band === 0 ? "animate-pulse" : ""}`} style={{ background: TEAM_COLORS[info.teamIdx] }} />
+            <span className="truncate font-medium">{info.text}</span>
+            {info.band < 2 && <span className="text-muted-foreground shrink-0 text-[10px]">{info.band === 1 ? "likely" : "unsure"}</span>}
+          </div>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
             <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
-          {sel && <div className="bg-background/90 absolute inset-x-2 bottom-2 rounded-xl border px-3 py-2 text-sm backdrop-blur">
+          {sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
             <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-amber-400">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
         </div>
         <div className="hidden lg:block">{controls}</div>
