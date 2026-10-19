@@ -76,6 +76,27 @@ export function PitchCanvas(props: Props) {
     }
 
 
+    // Classic football: white ball, black pentagon patches, spins as it moves
+    const pentagon = (cx: number, cy: number, rad: number, rot: number) => {
+      g.beginPath()
+      for (let i = 0; i < 5; i++) { const a = rot + (i * 2 * Math.PI) / 5 - Math.PI / 2; i ? g.lineTo(cx + rad * Math.cos(a), cy + rad * Math.sin(a)) : g.moveTo(cx + rad * Math.cos(a), cy + rad * Math.sin(a)) }
+      g.closePath()
+    }
+    const drawBall = (x: number, y: number, r: number, spin: number) => {
+      g.save(); g.beginPath(); g.arc(x, y, r, 0, 7); g.clip()
+      const gr = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r)
+      gr.addColorStop(0, "#ffffff"); gr.addColorStop(1, "#c9ced8"); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r)
+      g.strokeStyle = "rgba(60,60,70,.55)"; g.lineWidth = Math.max(0.6, r * 0.08)
+      for (let i = 0; i < 5; i++) { const a = spin + (i * 2 * Math.PI) / 5 - Math.PI / 2; g.beginPath(); g.moveTo(x + r * 0.42 * Math.cos(a), y + r * 0.42 * Math.sin(a)); g.lineTo(x + r * 0.78 * Math.cos(a), y + r * 0.78 * Math.sin(a)); g.stroke() }
+      g.fillStyle = "#14141a"; pentagon(x, y, r * 0.44, spin); g.fill()
+      for (let i = 0; i < 5; i++) {
+        const a = spin + (i * 2 * Math.PI) / 5 - Math.PI / 2 + Math.PI / 5
+        pentagon(x + r * 0.98 * Math.cos(a), y + r * 0.98 * Math.sin(a), r * 0.4, a + Math.PI / 2 + Math.PI); g.fill()
+      }
+      g.restore()
+      g.strokeStyle = "rgba(20,20,26,.85)"; g.lineWidth = Math.max(0.8, r * 0.07); g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke()
+    }
+
     // Ball path: separate arrows for the last touches, newest bright, oldest nearly gone
     const arrow = (x0: number, y0: number, x1: number, y1: number, a: number) => {
       const ang = Math.atan2(y1 - y0, x1 - x0), w = 1.4 + 2.2 * a, hs = 4 + 5 * a
@@ -217,10 +238,10 @@ export function PitchCanvas(props: Props) {
           }
         }
         // ball
-        const bw = w3(curBall[0], curBall[1]), bg2 = project(bw[0], bw[1], 0, psi), bp = project(bw[0], bw[1], 1.1, psi), br = Math.max(3.5, 1.1 * bg2[3])
+        const bw = w3(curBall[0], curBall[1]), bg2 = project(bw[0], bw[1], 0, psi), bp = project(bw[0], bw[1], 1.1, psi), br = Math.max(5.5, 1.7 * bg2[3])
         g.fillStyle = "rgba(0,0,0,.4)"; g.beginPath(); g.ellipse(bg2[0], bg2[1], br * 1.1, br * 0.5, 0, 0, 7); g.fill()
-        g.beginPath(); g.arc(bp[0], bp[1], br + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.25)"; g.fill()
-        g.beginPath(); g.arc(bp[0], bp[1], br, 0, 7); g.fillStyle = "#fff"; g.fill()
+        g.beginPath(); g.arc(bp[0], bp[1], br + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.22)"; g.fill()
+        drawBall(bp[0], bp[1], br, (curBall[0] + curBall[1]) * 0.12)
       }
       goal3(-gFar, psi)
     }
@@ -281,8 +302,9 @@ export function PitchCanvas(props: Props) {
           }
         }
         const bx = X(curBall[0]), by = Y(curBall[1])
-        g.beginPath(); g.arc(bx, by, r * 0.55 + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.25)"; g.fill()
-        g.beginPath(); g.arc(bx, by, r * 0.5, 0, 7); g.fillStyle = "#fff"; g.fill()
+        const brr = Math.max(5.5, r * 0.85)
+        g.beginPath(); g.arc(bx, by, brr + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.22)"; g.fill()
+        drawBall(bx, by, brr, (curBall[0] + curBall[1]) * 0.12)
       }
       raf = requestAnimationFrame(draw)
     }
