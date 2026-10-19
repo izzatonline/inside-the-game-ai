@@ -34,10 +34,10 @@ def test_personalisation_changes_output():
 
 def test_player_focus_only_shows_that_player_or_goals():
     pipe = MatchPipeline(NAMES, OfflineLLM())
-    prof = Profile(player="Jamal Whitfield")
+    prof = Profile(player="Tungtung Sahur")
     for e in generate_match(3):
         for o in pipe.process(e, prof):
-            assert o.kind == "goal" or "Jamal Whitfield" in (o.headline + o.body)
+            assert o.kind == "goal" or "Tungtung Sahur" in (o.headline + o.body)
 
 
 def test_fact_checker_blocks_invented_numbers():
@@ -109,7 +109,7 @@ def test_tactics_infer_style_and_roles():
     assert sum(a for a, _ in ppda) < sum(b for _, b in ppda)  # NOR press harder on average
     roles = {r["name"]: r["role"] for r in p["NOR"]["roles"]}
     assert roles["Callum Draper"] == "Inverted full-back"
-    assert roles["Joao Barreto"] == "Overlapping full-back"
+    assert roles["Itadori Yuji"] == "Overlapping full-back"
     assert any(o["title"] for o in p["NOR"]["options"])
 
 

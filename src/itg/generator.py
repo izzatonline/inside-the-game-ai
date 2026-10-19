@@ -20,6 +20,7 @@ from .models import Event
 _COASTAL_TEAMS: Dict[str, Dict] = {
     "NOR": {
         "name": "Northbridge FC",
+        "formation": "4-3-3",
         "tactic": {"line": 8.0, "width": 1.0, "press": 0.8, "long": 0.08},  # high line, press, short build-up
         "staff": {
             "coach": "Marco Villanueva", "assistants": ["Lena Voss", "Tariq Aziz"],
@@ -28,10 +29,10 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
                      ("Nico Valente", "FW", 18), ("Bruno Teles", "FW", 19), ("Jonas Eklund", "FW", 20)],
         },
         "players": [
-            ("Tomas Reyes", "GK"), ("Callum Draper", "DF"), ("Idris Okafor", "DF"),
-            ("Mats Lindqvist", "DF"), ("Joao Barreto", "DF"), ("Felix Hartmann", "MF"),
-            ("Kofi Mensah", "MF"), ("Luca Ferrante", "MF"), ("Yuto Arakawa", "FW"),
-            ("Dario Vukovic", "FW"), ("Jamal Whitfield", "FW"),
+            ("Adrian Wong", "GK"), ("Callum Draper", "DF"), ("Idris Okafor", "DF"),
+            ("Mats Lindqvist", "DF"), ("Itadori Yuji", "DF"), ("Afeef Rayan", "MF"),
+            ("Kofi Mensah", "MF"), ("Izzat Jamal", "MF"), ("Umayr Ziyad", "FW"),
+            ("Wafi Shaik", "FW"), ("Tungtung Sahur", "FW"),
         ],
         "slots": [  # 4-3-3: inverted RB, attacking LB, inside-forward RW
             ((5, 50), (14, 50)),
@@ -42,6 +43,7 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
     },
     "HAR": {
         "name": "Harbor City",
+        "formation": "4-2-3-1",
         "tactic": {"line": -6.0, "width": 0.95, "press": 0.3, "long": 0.24},  # low block, direct counter
         "staff": {
             "coach": "Elena Rostova", "assistants": ["Gareth Pugh", "Imani Okoye"],
@@ -91,6 +93,7 @@ TEAMS = MATCHES[DEFAULT_MATCH].teams  # default match, kept for existing callers
 _RIVERSIDE_TEAMS: Dict[str, Dict] = {
     "MER": {
         "name": "Meridian FC",
+        "formation": "4-1-4-1",
         "tactic": {"line": 10.0, "width": 1.05, "press": 0.9, "long": 0.05},  # dominant, high line, short passing
         "staff": {
             "coach": "Conrad Whitlock", "assistants": ["Bruno Esteves", "Yelena Marsh"],
@@ -113,6 +116,7 @@ _RIVERSIDE_TEAMS: Dict[str, Dict] = {
     },
     "TID": {
         "name": "Tidewater Town",
+        "formation": "5-4-1",
         "tactic": {"line": -12.0, "width": 1.0, "press": 0.25, "long": 0.32},  # deep five-man block, long counters
         "staff": {
             "coach": "Hamish Dunleavy", "assistants": ["Rory Quill", "Ines Barros"],
@@ -168,6 +172,7 @@ MATCHES["riverside"] = MatchSpec(
 _REDCREST_TEAMS: Dict[str, Dict] = {
     "RED": {
         "name": "Redcrest United",
+        "formation": "3-4-2-1",
         "tactic": {"line": 4.0, "width": 1.0, "press": 0.6, "long": 0.12},  # wing-backs, possession with width
         "staff": {
             "coach": "Ansel Whitcombe", "assistants": ["Ruta Kalnins", "Desmond Pryor"],
@@ -190,6 +195,7 @@ _REDCREST_TEAMS: Dict[str, Dict] = {
     },
     "KES": {
         "name": "Kestrel Town",
+        "formation": "4-4-2",
         "tactic": {"line": -6.0, "width": 1.0, "press": 0.35, "long": 0.22},  # compact 4-4-2, quick breaks
         "staff": {
             "coach": "Gavin Harrowgate", "assistants": ["Pia Santoro", "Neil Tranter"],

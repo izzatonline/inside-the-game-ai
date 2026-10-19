@@ -16,6 +16,7 @@ type Props = {
   staff: Staff[]
   bench: BenchState
   onBench: (b: BenchPick) => void
+  benchSel: BenchPick
 }
 
 const GW = 44, GH = 28
@@ -313,6 +314,16 @@ export function PitchCanvas(props: Props) {
     const subRole = (st: Staff, i: number, state: "seat" | "warm" | "used") =>
       `Substitute #${st.subs[i].number} · ${state === "warm" ? "warming up" : state === "used" ? "now on the pitch" : st.subs[i].pos}`
 
+    // Ring around the selected substitute / coach so it is clear who is picked
+    const benchRing = (ts: number) => {
+      const sb = live.current.benchSel
+      if (!sb) return
+      const h = benchHeads.find((x) => x.pick.team === sb.team && x.pick.name === sb.name)
+      if (!h) return
+      g.save(); g.strokeStyle = "#fbbf24"; g.lineWidth = 2.4
+      g.beginPath(); g.arc(h.x, h.y, Math.max(8, h.r - 1) + Math.sin(ts / 200) * 1.2, 0, 7); g.stroke(); g.restore()
+    }
+
     const drawBench2D = (ts: number) => {
       const { staff, bench, codes, frames } = live.current
       const fr = frames.current, top = Hp, strip = H - Hp
@@ -358,6 +369,7 @@ export function PitchCanvas(props: Props) {
       }
       g.beginPath(); g.roundRect(W / 2 - 16, top + strip * 0.34, 32, strip * 0.34, 4); g.fillStyle = "rgba(255,255,255,.12)"; g.fill()
       g.font = "700 7px system-ui"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#cbd5e1"; g.fillText("4TH OFFICIAL", W / 2, top + strip * 0.51)
+      benchRing(ts)
     }
 
     const stand3 = (wx: number, wy: number, headZ: number, psi: number, fill: string, stroke: string, label: string, ink: string, alpha = 1, sc = 1) => {
@@ -405,6 +417,7 @@ export function PitchCanvas(props: Props) {
           benchHeads.push({ x: ah[0], y: ah[1], r: ah[2] + 5, pick: { team: t, name: nm, role: "Assistant coach" } })
         })
       }
+      benchRing(ts)
     }
 
     const draw = (ts: number) => {

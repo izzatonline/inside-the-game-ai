@@ -18,6 +18,7 @@ from .bus import Broadcaster, make_source
 from .generator import DEFAULT_MATCH, MATCHES, MatchSpec, generate_match
 from .llm import get_llm
 from .models import Profile
+from .tactics import formation_lines
 from .templates import LANGUAGES
 
 STATIC = pathlib.Path(__file__).parent / "static"  # built by `npm run build` in frontend/
@@ -47,6 +48,7 @@ def _pipeline(spec: MatchSpec, seed: int) -> MatchPipeline:
 def _roster(spec: MatchSpec):
     return {c: {"name": v["name"], "players": [n for n, _ in v["players"]],
                 "slots": [list(o) for o, _ in v["slots"]],
+                "formation": v["formation"], "lines": formation_lines(v["slots"], v["formation"]),
                 "staff": {"coach": v["staff"]["coach"], "assistants": v["staff"]["assistants"],
                           "subs": [{"name": n, "pos": p, "number": k} for n, p, k in v["staff"]["subs"]]}}
             for c, v in spec.teams.items()}

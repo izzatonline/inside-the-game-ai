@@ -140,7 +140,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
 
   const controls = (
     <>
-<div className="mt-2 flex max-w-full items-center gap-3 overflow-x-auto pb-1">
+<div className="mt-2 flex max-w-full items-center gap-3 overflow-x-auto pb-1 [&>*]:shrink-0">
           <Button variant="outline" size="sm" onClick={cycleSpeed} aria-label="Change playback speed" title="Change playback speed" className="tabular-nums">{applied.speed}×</Button>
           <Toggle pressed={view3d} onPressedChange={setView3d} variant="outline" size="sm" aria-label="3D view"><Box /> 3D</Toggle>
           <ToggleGroup multiple value={layers} onValueChange={setLayers} variant="outline" size="sm" spacing={1}>
@@ -164,11 +164,11 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
         <div className="relative">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
-          <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={openTimeline} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openTimeline() }}>
+          <Card size="sm" className="hover:bg-muted/40 min-w-0 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={openTimeline} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") openTimeline() }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center px-2 sm:px-4">
-            <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-1.5 text-center sm:px-3"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
-            <div className="flex min-w-0 items-center justify-end gap-1.5 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
+            <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold max-[359px]:text-xs"><span className="size-2.5 shrink-0 rounded-full max-[359px]:hidden" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
+            <div className="px-1.5 text-center sm:px-3"><div className="text-xl leading-none font-extrabold tabular-nums min-[360px]:text-2xl">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3 max-[359px]:hidden" /></div></div>
+            <div className="flex min-w-0 items-center justify-end gap-1.5 text-sm font-semibold max-[359px]:text-xs"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full max-[359px]:hidden" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
             </Card>
           <Button variant={state === "ended" ? "default" : "outline"} size="icon-lg" aria-label={state === "playing" ? "Pause match" : state === "paused" ? "Resume match" : "Replay match"} title={state === "playing" ? "Pause" : state === "paused" ? "Resume" : "Replay from kick-off"} onClick={togglePlay}>{state === "playing" ? <Pause /> : state === "paused" ? <Play /> : <RotateCcw />}</Button>
@@ -190,7 +190,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
             opacity: hidePitch ? 0 : 1, maxHeight: hidePitch ? 0 : pitchH, visibility: hidePitch ? "hidden" : "visible",
             transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
           } : undefined}>
-          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
+          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} benchSel={benchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 right-2 hidden sm:inline-flex">{state === "ended" ? "Full time" : state === "paused" ? "Paused" : `Playing · ${applied.speed}×`}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur sm:top-9">Drag to rotate · double-tap to reset</Badge>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
@@ -246,7 +246,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
           </TabsContent>
           <TabsContent value="tactics"><TacticsPanel tactics={tactics} codes={codes} selected={selected} onSelect={setSelected} subLog={subLog} /></TabsContent>
           <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} recap={recap} /></TabsContent>
-          <TabsContent value="lineups"><LineupsPanel cfg={cfg} codes={codes} tactics={tactics} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
+          <TabsContent value="lineups"><LineupsPanel cfg={cfg} codes={codes} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
         </Tabs>
       </div>
       <Dialog open={momentumOpen} onOpenChange={setMomentumOpen}>

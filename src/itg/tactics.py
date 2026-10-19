@@ -60,6 +60,16 @@ def _partition(xs: List[float], k: int) -> Tuple[float, List[int]]:
     return solve(0, k)
 
 
+def formation_lines(slots, formation: str) -> List[List[int]]:
+    """Player indices per line for a declared formation like '4-2-3-1' (GK first, lines ordered left to right)."""
+    field = sorted(range(1, 11), key=lambda i: (slots[i][0][0], slots[i][0][1]))
+    lines, start = [[0]], 0
+    for n in (int(x) for x in formation.split("-")):
+        lines.append(sorted(field[start:start + n], key=lambda i: slots[i][0][1]))
+        start += n
+    return lines
+
+
 def _hull(points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     pts = sorted(set(points))
     if len(pts) < 3:
