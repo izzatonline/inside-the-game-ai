@@ -10,6 +10,7 @@ type Props = {
   focus: string[]
   selected: Selected
   onSelect: (s: Selected) => void
+  view3d: boolean
 }
 
 const GW = 44, GH = 28
@@ -41,7 +42,7 @@ export function PitchCanvas(props: Props) {
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      W = cv.clientWidth; H = (W * 68) / 105
+      W = cv.clientWidth; H = live.current.view3d ? W * 0.625 : (W * 68) / 105
       cv.width = W * dpr; cv.height = H * dpr
       g.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
@@ -74,11 +75,163 @@ export function PitchCanvas(props: Props) {
       cg.putImageData(img, 0, 0)
     }
 
+
+    // ---------- 3D camera ----------
+    const cam = { psi: 0, alpha: 0.8, dragged: false }
+    const heads: number[][] = new Array(22).fill(0).map(() => [-99, -99, 0])
+    const D = 120
+    let F = 1, CX = 0, CY = 0
+    const project = (wx: number, wy: number, wz: number, psi: number): number[] => {
+      const c = Math.cos(psi), sn = Math.sin(psi), ca = Math.cos(cam.alpha), sa = Math.sin(cam.alpha)
+      const x = wx * c - wy * sn, y = wx * sn + wy * c
+      const depth = y * sa - wz * ca + D
+      const k = F / depth
+      return [CX + x * k, CY - (y * ca + wz * sa) * k, depth, k]
+    }
+    const fit = (psi: number) => {
+      F = 1; CX = 0; CY = 0
+      const pts = [[-52.5, -34, 0], [52.5, -34, 0], [52.5, 34, 0], [-52.5, 34, 0], [-52.5, 0, 6], [52.5, 0, 6]]
+      const pr = pts.map((p) => project(p[0], p[1], p[2], psi))
+      const xs = pr.map((p) => p[0]), ys = pr.map((p) => p[1])
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+      F = Math.min((W * 0.96) / (maxX - minX), (H * 0.94) / (maxY - minY))
+      CX = W / 2 - (F * (minX + maxX)) / 2; CY = H / 2 - (F * (minY + maxY)) / 2
+    }
+    const w3 = (x: number, y: number) => [(x / 100 - 0.5) * 105, (y / 100 - 0.5) * 68]
+    const poly = (pts: number[][], fill?: string, stroke?: string, lw = 1) => {
+      g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath()
+      if (fill) { g.fillStyle = fill; g.fill() }
+      if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw; g.stroke() }
+    }
+    const line3 = (pts: number[][], psi: number, z = 0.03) => {
+      g.beginPath(); pts.forEach((p, i) => { const q = project(p[0], p[1], z, psi); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]) }); g.stroke()
+    }
+    const goal3 = (end: number, psi: number) => {
+      const x = end * 52.5, hw = 3.66, hh = 2.44, back = end * 2.2
+      const a = project(x, -hw, 0, psi), b = project(x, -hw, hh, psi), c = project(x, hw, hh, psi), d = project(x, hw, 0, psi)
+      const a2 = project(x + back, -hw, 0, psi), b2 = project(x + back, -hw, hh, psi), c2 = project(x + back, hw, hh, psi), d2 = project(x + back, hw, 0, psi)
+      poly([b, c, c2, b2], "rgba(255,255,255,.08)"); poly([a, b, b2, a2], "rgba(255,255,255,.06)"); poly([d, c, c2, d2], "rgba(255,255,255,.06)")
+      g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 2
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.lineTo(d[0], d[1]); g.stroke()
+    }
+
+    const draw3D = (ts: number, cur: number[][] | null, curBall: number[]) => {
+      const { tactics, codes, layers, focus, selected, frames } = live.current
+      const fr = frames.current
+      const psi = cam.psi + (cam.dragged ? 0 : 0.09 * Math.sin(ts / 3500))
+      fit(psi)
+      // backdrop
+      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#050914"); bg.addColorStop(1, "#0a1a2b")
+      g.fillStyle = bg; g.fillRect(0, 0, W, H)
+      const glow = project(0, 0, 0, psi); const rg = g.createRadialGradient(glow[0], glow[1], 10, glow[0], glow[1], W * 0.7)
+      rg.addColorStop(0, "rgba(56,189,248,.16)"); rg.addColorStop(1, "rgba(56,189,248,0)"); g.fillStyle = rg; g.fillRect(0, 0, W, H)
+      // slab sides
+      const cs = [[-52.5, -34], [52.5, -34], [52.5, 34], [-52.5, 34]]
+      for (let i = 0; i < 4; i++) {
+        const a = cs[i], b = cs[(i + 1) % 4]
+        poly([project(a[0], a[1], 0, psi), project(b[0], b[1], 0, psi), project(b[0], b[1], -2, psi), project(a[0], a[1], -2, psi)], "#06120c")
+      }
+      // grass stripes
+      for (let i = 0; i < 14; i++) {
+        const x0 = -52.5 + i * 7.5, x1 = x0 + 7.5
+        poly([project(x0, -34, 0, psi), project(x1, -34, 0, psi), project(x1, 34, 0, psi), project(x0, 34, 0, psi)], i % 2 ? "#0f4a2c" : "#115c34")
+      }
+      // markings
+      g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1.4
+      line3([[-52.5, -34], [52.5, -34], [52.5, 34], [-52.5, 34], [-52.5, -34]], psi); line3([[0, -34], [0, 34]], psi)
+      line3(Array.from({ length: 49 }, (_, i) => [9.15 * Math.cos((i / 48) * 6.2832), 9.15 * Math.sin((i / 48) * 6.2832)]), psi)
+      for (const e of [-1, 1]) {
+        line3([[e * 52.5, -20.2], [e * 36, -20.2], [e * 36, 20.2], [e * 52.5, 20.2]], psi)
+        line3([[e * 52.5, -9.2], [e * 47, -9.2], [e * 47, 9.2], [e * 52.5, 9.2]], psi)
+      }
+      // far goal first
+      const gFar = project(52.5, 0, 0, psi)[2] > project(-52.5, 0, 0, psi)[2] ? 1 : -1
+      goal3(gFar, psi)
+
+      if (cur) {
+        // territory as terrain: height = dominance
+        if (layers.includes("control")) {
+          const NX = 36, NY = 24, hgt: number[][] = [], val: number[][] = []
+          for (let j = 0; j <= NY; j++) { hgt.push([]); val.push([]) }
+          for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) {
+            const px = (i / NX) * 100, py = (j / NY) * 100
+            let a = 0, b = 0
+            for (let n = 0; n < 22; n++) { const dx = (px - cur[n][0]) * 1.05, dy = (py - cur[n][1]) * 0.68, w = Math.exp(-(dx * dx + dy * dy) / 128); if (n < 11) a += w; else b += w }
+            const v = (a - b) / (a + b + 0.02), cov = Math.min(1, (a + b) * 1.1)
+            val[j][i] = v * cov; hgt[j][i] = v * cov * 4.5
+          }
+          const order = [] as number[]; for (let j = NY - 1; j >= 0; j--) order.push(j)
+          const flip = psi > 0 ? 1 : 1
+          for (const j of order) for (let ii = 0; ii < NX; ii++) {
+            const i = flip ? ii : NX - 1 - ii
+            const v = (val[j][i] + val[j][i + 1] + val[j + 1][i] + val[j + 1][i + 1]) / 4, al = Math.min(0.6, Math.abs(v) * 0.75)
+            if (al < 0.05) continue
+            const P = (ci: number, cj: number) => { const w = w3((ci / NX) * 100, (cj / NY) * 100); return project(w[0], w[1], Math.max(0, hgt[cj][ci]) * (hgt[cj][ci] > 0 ? 1 : 0.35) , psi) }
+            poly([P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)], v > 0 ? `rgba(56,189,248,${al})` : `rgba(244,63,94,${al})`)
+          }
+        }
+        // hulls on the ground
+        if (layers.includes("shape")) [0, 1].forEach((t) => {
+          const pts: number[][] = []
+          for (let n = 1; n < 11; n++) { const w = w3(cur[t * 11 + n][0], cur[t * 11 + n][1]); pts.push([w[0], w[1]]) }
+          const h = hull(pts); if (h.length < 3) return
+          poly(h.map((p) => project(p[0], p[1], 0.1, psi)), TEAM_COLORS[t] + "26", TEAM_COLORS[t] + "dd", 2)
+        })
+        if (layers.includes("trail") && fr.trail.length > 1) {
+          g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 2
+          line3(fr.trail.map((p) => w3(p[0], p[1])), psi, 0.4)
+        }
+        // players, far to near
+        type T = { t: number; n: number; gp: number[] }
+        const list: T[] = []
+        for (let t = 0; t < 2; t++) for (let n = 0; n < 11; n++) { const w = w3(cur[t * 11 + n][0], cur[t * 11 + n][1]); list.push({ t, n, gp: project(w[0], w[1], 0, psi) }) }
+        list.sort((a, b) => b.gp[2] - a.gp[2])
+        for (const { t, n, gp } of list) {
+          const w = w3(cur[t * 11 + n][0], cur[t * 11 + n][1]), hd = project(w[0], w[1], 3.4, psi)
+          const r = Math.max(5, 2.1 * gp[3]), sel = selected && selected.team === t && selected.idx === n
+          g.fillStyle = "rgba(0,0,0,.35)"; g.beginPath(); g.ellipse(gp[0], gp[1], r * 1.2, r * 0.5, 0, 0, 7); g.fill()
+          g.strokeStyle = TEAM_COLORS[t] + "aa"; g.lineWidth = 2; g.beginPath(); g.moveTo(gp[0], gp[1]); g.lineTo(hd[0], hd[1]); g.stroke()
+          if (sel) { g.strokeStyle = "#fbbf24"; g.lineWidth = 2; g.beginPath(); g.ellipse(gp[0], gp[1], r * 1.7 + Math.sin(ts / 200) * 1.5, r * 0.8, 0, 0, 7); g.stroke() }
+          g.beginPath(); g.arc(hd[0], hd[1], r, 0, 7); g.fillStyle = TEAM_COLORS[t]; g.fill()
+          g.lineWidth = n === 0 ? 2.5 : 1.5; g.strokeStyle = n === 0 ? "#fbbf24" : "#fff"; g.stroke()
+          g.fillStyle = "#04121c"; g.font = `700 ${Math.round(r * 1.05)}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"
+          g.fillText(String(n + 1), hd[0], hd[1] + 0.5)
+          heads[t * 11 + n] = [hd[0], hd[1], r]
+          const role = layers.includes("roles") && focus.includes(codes[t]) && n > 0 ? tactics[codes[t]]?.roles[n] : undefined
+          if (role) {
+            const f = Math.round(Math.max(8, r * 0.95)); g.font = `800 ${f}px system-ui`
+            const bw = g.measureText(role.short).width + 8
+            g.fillStyle = "rgba(7,11,20,.88)"; g.beginPath(); g.roundRect(hd[0] - bw / 2, hd[1] - r - f - 6, bw, f + 4, 5); g.fill()
+            g.fillStyle = BADGE_COLORS[role.short] ?? "#fff"; g.fillText(role.short, hd[0], hd[1] - r - f / 2 - 4)
+          }
+        }
+        // ball
+        const bw = w3(curBall[0], curBall[1]), bg2 = project(bw[0], bw[1], 0, psi), bp = project(bw[0], bw[1], 1.1, psi), br = Math.max(3.5, 1.1 * bg2[3])
+        g.fillStyle = "rgba(0,0,0,.4)"; g.beginPath(); g.ellipse(bg2[0], bg2[1], br * 1.1, br * 0.5, 0, 0, 7); g.fill()
+        g.beginPath(); g.arc(bp[0], bp[1], br + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.25)"; g.fill()
+        g.beginPath(); g.arc(bp[0], bp[1], br, 0, 7); g.fillStyle = "#fff"; g.fill()
+      }
+      goal3(-gFar, psi)
+    }
+
+    const mouse = { x: 0, y: 0, down: false, moved: 0 }
+    const onDown = (e: PointerEvent) => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.down = true; mouse.moved = 0 }
+    const onMove = (e: PointerEvent) => {
+      if (!mouse.down || !live.current.view3d) return
+      const dx = e.clientX - mouse.x, dy = e.clientY - mouse.y
+      mouse.moved += Math.abs(dx) + Math.abs(dy); mouse.x = e.clientX; mouse.y = e.clientY
+      if (mouse.moved > 6) { cam.dragged = true; cam.psi = Math.max(-0.8, Math.min(0.8, cam.psi + dx * 0.006)); cam.alpha = Math.max(0.5, Math.min(1.3, cam.alpha - dy * 0.005)) }
+    }
+    const onUp = () => { mouse.down = false }
+    const onDbl = () => { cam.dragged = false; cam.psi = 0; cam.alpha = 0.8 }
+    cv.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp); cv.addEventListener("dblclick", onDbl)
+    cv.addEventListener("pointerdown", onDown)
+
     const draw = (ts: number) => {
       const { frames, tactics, codes, layers, focus, selected } = live.current
       const fr = frames.current
       const dt = Math.min(0.1, (ts - last) / 1000 || 0.016); last = ts
-      g.clearRect(0, 0, W, H); pitch()
+      g.clearRect(0, 0, W, H)
       if (fr.reset) { cur = null; fr.reset = false }
       if (!cur && fr.target) { cur = fr.target.map((p) => p.slice()); curBall = fr.ball.slice() }
       if (cur && fr.target) {
@@ -86,6 +239,10 @@ export function PitchCanvas(props: Props) {
         for (let n = 0; n < 22; n++) { cur[n][0] += (fr.target[n][0] - cur[n][0]) * k; cur[n][1] += (fr.target[n][1] - cur[n][1]) * k }
         const kb = Math.min(1, k * 1.6)
         curBall[0] += (fr.ball[0] - curBall[0]) * kb; curBall[1] += (fr.ball[1] - curBall[1]) * kb
+      }
+      if (live.current.view3d) { draw3D(ts, cur, curBall); raf = requestAnimationFrame(draw); return }
+      pitch()
+      if (cur && fr.target) {
         if (layers.includes("control")) { control(cur); g.imageSmoothingEnabled = true; g.drawImage(ctrl, 0, 0, W, H) }
         if (layers.includes("shape")) [0, 1].forEach((t) => {
           const pts: number[][] = []
@@ -106,6 +263,7 @@ export function PitchCanvas(props: Props) {
           if (sel) { g.beginPath(); g.arc(x, y, r + 4 + Math.sin(ts / 200) * 1.5, 0, 7); g.strokeStyle = "#fbbf24"; g.lineWidth = 2; g.stroke() }
           g.fillStyle = "#04121c"; g.font = `700 ${Math.round(r * 1.05)}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"
           g.fillText(String(n + 1), x, y + 0.5)
+          heads[t * 11 + n] = [x, y, r]
           const role = layers.includes("roles") && focus.includes(codes[t]) && n > 0 ? tactics[codes[t]]?.roles[n] : undefined
           if (role) {
             const f = Math.round(Math.max(8, r * 0.95)); g.font = `800 ${f}px system-ui`
@@ -123,18 +281,15 @@ export function PitchCanvas(props: Props) {
     raf = requestAnimationFrame(draw)
 
     const pick = (e: PointerEvent) => {
-      if (!cur) return
+      if (!cur || mouse.moved > 6) return
       const rect = cv.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top
-      let best: Selected = null, bd = 26
-      for (let t = 0; t < 2; t++) for (let n = 0; n < 11; n++) {
-        const d = Math.hypot(X(cur[t * 11 + n][0]) - mx, Y(cur[t * 11 + n][1]) - my)
-        if (d < bd) { bd = d; best = { team: t, idx: n } }
-      }
+      let best: Selected = null, bd = 28
+      for (let i = 0; i < 22; i++) { const d = Math.hypot(heads[i][0] - mx, heads[i][1] - my); if (d < bd) { bd = d; best = { team: i < 11 ? 0 : 1, idx: i % 11 } } }
       live.current.onSelect(best)
     }
-    cv.addEventListener("pointerdown", pick)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); cv.removeEventListener("pointerdown", pick) }
+    cv.addEventListener("pointerup", pick)
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); cv.removeEventListener("pointerup", pick); cv.removeEventListener("pointerdown", onDown); cv.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); cv.removeEventListener("dblclick", onDbl) }
   }, [])
 
-  return <canvas ref={ref} className="block aspect-[105/68] w-full touch-manipulation" />
+  return <canvas ref={ref} className={`block w-full touch-manipulation ${props.view3d ? "aspect-[16/10] cursor-grab" : "aspect-[105/68]"}`} />
 }

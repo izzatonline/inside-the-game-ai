@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Settings2 } from "lucide-react"
+import { Box, Settings2 } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useMatchStream } from "@/hooks/useMatchStream"
 import { TEAM_COLORS } from "@/lib/theme"
@@ -38,6 +39,7 @@ function Match({ cfg }: { cfg: Config }) {
   const [layers, setLayers] = useState(["shape", "control", "roles", "trail"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
+  const [view3d, setView3d] = useState(params.get("view") === "3d")
   const { frames, stats, tactics, overlays, recap, status, toast } = useMatchStream(applied, runId)
   const narrow = useMemo(() => window.innerWidth < 480, [])
 
@@ -52,6 +54,7 @@ function Match({ cfg }: { cfg: Config }) {
   const controls = (
     <>
 <div className="mt-2 flex max-w-full items-center gap-3 overflow-x-auto pb-1">
+          <Toggle pressed={view3d} onPressedChange={setView3d} variant="outline" size="sm" aria-label="3D view"><Box /> 3D</Toggle>
           <ToggleGroup multiple value={layers} onValueChange={setLayers} variant="outline" size="sm" spacing={1}>
             <ToggleGroupItem value="shape">Team shape</ToggleGroupItem><ToggleGroupItem value="control">Territory</ToggleGroupItem>
             <ToggleGroupItem value="roles">Roles</ToggleGroupItem><ToggleGroupItem value="trail">Ball trail</ToggleGroupItem>
@@ -79,8 +82,9 @@ function Match({ cfg }: { cfg: Config }) {
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         <div className="border-border relative overflow-hidden rounded-2xl border shadow-2xl">
-          <PitchCanvas frames={frames} tactics={tactics} codes={codes} layers={layers} focus={focus} selected={selected} onSelect={setSelected} />
+          <PitchCanvas frames={frames} tactics={tactics} codes={codes} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
+          {view3d && <Badge variant="outline" className="bg-background/70 absolute right-2 bottom-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
             <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
           {sel && <div className="bg-background/90 absolute inset-x-2 bottom-2 rounded-xl border px-3 py-2 text-sm backdrop-blur">
