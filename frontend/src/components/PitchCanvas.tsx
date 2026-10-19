@@ -192,7 +192,7 @@ export function PitchCanvas(props: Props) {
       fit(psi)
       // backdrop
       const dark = document.documentElement.classList.contains("dark")
-      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, dark ? "#050914" : "#f1f3f6"); bg.addColorStop(1, dark ? "#0a1a2b" : "#e1e7ee")
+      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, dark ? "#050914" : "#ffffff"); bg.addColorStop(1, dark ? "#0a1a2b" : "#e8edf3")
       g.fillStyle = bg; g.fillRect(0, 0, W, H)
       const glow = project(0, 0, 0, psi); const rg = g.createRadialGradient(glow[0], glow[1], 10, glow[0], glow[1], W * 0.7)
       rg.addColorStop(0, dark ? "rgba(56,189,248,.16)" : "rgba(0,255,133,.26)"); rg.addColorStop(1, "rgba(56,189,248,0)"); g.fillStyle = rg; g.fillRect(0, 0, W, H)

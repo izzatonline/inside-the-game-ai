@@ -28,7 +28,7 @@ export type Staff = { coach: string; assistants: string[]; subs: { name: string;
 export type BenchState = Record<string, { warming: number[]; used: number[] }>
 export type BenchPick = { team: number; name: string; role: string } | null
 export type Config = {
-  llm: string; orchestration: string; languages: Record<string, string>; match: { id: string; title: string; subtitle: string }
+  llm: string; orchestration: string; languages: Record<string, string>; match: { id: string; title: string; subtitle: string; duration_min: number }
   teams: Record<string, { name: string; players: string[]; slots: number[][]; staff: Staff }>
 }
 export type MatchInfo = { id: string; title: string; subtitle: string; blurb: string; duration_min: number; scripted: boolean; teams: { code: string; name: string }[] }

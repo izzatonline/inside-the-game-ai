@@ -52,20 +52,24 @@ def _roster(spec: MatchSpec):
             for c, v in spec.teams.items()}
 
 
-async def _step(pipe, ev, profile, last_stats: float):
+def _frame_chunk(ev) -> str:
+    return _sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase", "phase_conf")}
+                | {"t": ev.t})
+
+
+async def _step(pipe, ev, profile, last_stats: float, frames: bool = True, stats_every: float = 10.0):
     """Process one event; return (sse chunks, new last_stats)."""
     out = []
     overlays = await asyncio.to_thread(pipe.process, ev, profile)
-    if ev.type == "tracking":
-        out.append(_sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase", "phase_conf")}
-                        | {"t": ev.t}))
+    if ev.type == "tracking" and frames:
+        out.append(_frame_chunk(ev))
     if ev.type in ("warmup", "substitution"):
         out.append(_sse("bench", ev.to_dict()))
     tac = pipe.state.tactics.take_update()
     if tac:
         tac = await asyncio.to_thread(pipe.localize_tactics, tac, profile, ev.t)
         out.append(_sse("tactics", tac))
-    if ev.type != "tracking" and (ev.t - last_stats >= 10 or overlays or ev.type == "fulltime"):
+    if ev.type != "tracking" and (ev.t - last_stats >= stats_every or overlays or ev.type == "fulltime"):
         last_stats = ev.t
         out.append(_sse("stats", pipe.state.snapshot()))
     out.extend(_sse("overlay", ov.to_dict()) for ov in overlays)
@@ -105,7 +109,8 @@ def config(match: str = DEFAULT_MATCH):
     return {
         "llm": _llm.name, "orchestration": "agent-framework" if _runner else "plain",
         "languages": LANGUAGES,
-        "match": {"id": _spec(match).id, "title": _spec(match).title, "subtitle": _spec(match).subtitle},
+        "match": {"id": _spec(match).id, "title": _spec(match).title, "subtitle": _spec(match).subtitle,
+                  "duration_min": round(_spec(match).duration / 60)},
         "teams": _roster(_spec(match)),
     }
 
@@ -119,16 +124,36 @@ def match_events(seed: int = 7, match: str = DEFAULT_MATCH):
 @app.get("/api/stream")
 async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str = "casual",
                  team: Optional[str] = None, player: Optional[str] = None,
-                 metric: Optional[str] = None, match: str = DEFAULT_MATCH):
+                 metric: Optional[str] = None, match: str = DEFAULT_MATCH, start: float = 0.0):
+    """Replay a match. `start` (minutes) jumps in mid-match: earlier events are processed silently and sent as a
+    quick catch-up burst (feed, stats, tactics, bench, last frame), then play continues live from there."""
     profile = Profile(mode=mode if mode in ("casual", "analyst") else "casual", lang=lang,
                       team=team or None, player=player or None, metric=metric or None)
     spec = _spec(match)
     events = generate_match(seed, match=spec.id)
     pipe = _pipeline(spec, seed)
+    start_t = max(0.0, start) * 60.0
 
     async def gen():
         prev_t, last_stats = 0.0, -99.0
-        for ev in events:
+        first = 0
+        if start_t > 0:
+            last_track = None
+            for ev in events:
+                if ev.t >= start_t:
+                    break
+                first += 1
+                if ev.type == "tracking":
+                    last_track = ev
+                chunks, last_stats = await _step(pipe, ev, profile, last_stats, frames=False, stats_every=30.0)
+                for c in chunks:
+                    yield c
+            if last_track is not None:
+                yield _frame_chunk(last_track)
+            yield _sse("stats", pipe.state.snapshot())
+            yield _sse("live", {"start": start})
+            prev_t = start_t
+        for ev in events[first:]:
             await asyncio.sleep(max(0.0, min(ev.t - prev_t, 60)) / max(speed, 1))
             prev_t = ev.t
             chunks, last_stats = await _step(pipe, ev, profile, last_stats)

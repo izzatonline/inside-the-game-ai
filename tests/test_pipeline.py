@@ -259,3 +259,19 @@ def test_redcrest_storyline_own_goal_var_and_penalty():
     assert r["headline"].startswith("Full time: Redcrest United 5-2 Kestrel Town")
     assert any(g.get("og") for g in r["goals"])
     assert 52 <= r["stats"]["RED"]["possession_pct"] <= 75
+
+
+def test_stream_start_minute_catches_up_and_ends_the_same():
+    from fastapi.testclient import TestClient
+
+    from itg.server import app
+
+    c = TestClient(app)
+    base = "/api/stream?match=riverside&speed=1000000&lang=en&mode=analyst"
+    full = c.get(base).text
+    part = c.get(base + "&start=70").text
+    assert "event: live" in part and "event: live" not in full
+    history = part.split("event: live")[0]
+    assert '"kind": "goal"' in history and "event: bench" in history  # early goals and subs come in the burst
+    assert part.count("event: frame") < 0.5 * full.count("event: frame")  # frames before the jump are skipped
+    assert part.split("event: recap")[1] == full.split("event: recap")[1]  # same final result either way

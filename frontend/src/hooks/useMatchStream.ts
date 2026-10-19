@@ -7,10 +7,12 @@ export type Toast = { id: number; title: string; body: string; goal: boolean }
 const emptyBench = (cfg: Config): BenchState => Object.fromEntries(Object.keys(cfg.teams).map((c) => [c, { warming: [], used: [] }]))
 const startRoster = (cfg: Config) => Object.fromEntries(Object.entries(cfg.teams).map(([c, t]) => [c, t.players.slice()]))
 
-export function useMatchStream(settings: Settings, runId: number, cfg: Config) {
+export function useMatchStream(settings: Settings, runId: number, cfg: Config, start = 0) {
   const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null })
   const latest = useRef(settings)
   latest.current = settings
+  const latestStart = useRef(start)
+  latestStart.current = start
   const [stats, setStats] = useState<Stats | null>(null)
   const [tactics, setTactics] = useState<TacticsMap>({})
   const [overlays, setOverlays] = useState<Overlay[]>([])
@@ -30,12 +32,13 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config) {
     frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null }
     setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null)
     const player = s.player.split(":")[2] ?? ""
-    const q = new URLSearchParams({ match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric })
+    const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric })
     const es = new EventSource(`/api/${s.src}?${q}`)
     let toastId = 0
+    let live = latestStart.current <= 0  // no toasts while the catch-up burst replays earlier moments
     let lastKey = ""
     const acc = new Map<number, { sum: number; n: number }>()
-    const show = (title: string, body: string, goal: boolean) => setToast({ id: ++toastId, title, body, goal })
+    const show = (title: string, body: string, goal: boolean) => { if (live) setToast({ id: ++toastId, title, body, goal }) }
     es.addEventListener("frame", (e) => {
       const f = JSON.parse((e as MessageEvent).data) as {
         pos: number[][]; ball: number[]; poss: string; holder: [string, number] | null; conf: number; phase: string; phase_conf: number
@@ -76,12 +79,13 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config) {
       if (b.type === "substitution") setSubLog((prev) => [...prev, { minute: b.minute, team: b.team, slot: b.meta.slot, player_in: b.player, player_out: b.meta.player_out ?? "", number: b.meta.number }])
       if (b.type === "substitution") setRoster((prev) => ({ ...prev, [b.team]: prev[b.team].map((n, i) => (i === b.meta.slot ? b.player : n)) }))
     })
+    es.addEventListener("live", () => { live = true })
     es.addEventListener("tactics", (e) => { setTactics(JSON.parse((e as MessageEvent).data)); setStatus("AI shape analysis live") })
     es.addEventListener("overlay", (e) => {
       const o = JSON.parse((e as MessageEvent).data) as Overlay
       setOverlays((prev) => [o, ...prev].slice(0, 40))
       if (o.kind === "card") setCards((prev) => [...prev, { minute: o.minute, team: o.team, player: o.player }])
-      if (o.kind === "goal") { setGoals((prev) => [...prev, { minute: o.minute, team: o.team, player: o.player }]); frames.current.goal = { team: o.team, at: performance.now() } }
+      if (o.kind === "goal") { setGoals((prev) => [...prev, { minute: o.minute, team: o.team, player: o.player }]); if (live) frames.current.goal = { team: o.team, at: performance.now() } }
       if (o.kind === "goal") show(o.headline, o.body, true)
       else if (o.kind === "tactic_shift" || o.kind === "substitution") show(o.headline, o.body, false)
     })

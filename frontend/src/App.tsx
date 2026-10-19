@@ -4,6 +4,7 @@ import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
 import { SettingsSheet } from "@/components/SettingsSheet"
+import { TimeScrubber } from "@/components/TimeScrubber"
 import { StatsPanel } from "@/components/StatsPanel"
 import { LineupsPanel } from "@/components/LineupsPanel"
 import { RecapCard } from "@/components/RecapCard"
@@ -73,12 +74,15 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const [draft, setDraft] = useState(initial)
   const [applied, setApplied] = useState(initial)
   const [runId, setRunId] = useState(0)
+  const [startMin, setStartMin] = useState(0)
+  const [scrub, setScrub] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [open, setOpen] = useState(false)
   const [layers, setLayers] = useState(["shape", "control", "roles"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")
-  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream({ ...applied, match: matchId }, runId, cfg)
+  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream({ ...applied, match: matchId }, runId, cfg, startMin)
   const { toggleSidebar } = useSidebar()
   const [benchSel, setBenchSel] = useState<BenchPick>(null)
   const info = ball ? describeBall(ball, cfg, codes) : null
@@ -109,7 +113,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   const apply = () => {
     const [c, i] = draft.player ? draft.player.split(":") : []
     setSelected(c ? { team: codes.indexOf(c), idx: Number(i) } : null)
-    setApplied(draft); setRunId((n) => n + 1); setOpen(false)
+    setApplied(draft); setStartMin(0); setRunId((n) => n + 1); setOpen(false)
   }
   const sel = selected ? { name: (roster[codes[selected.team]] ?? cfg.teams[codes[selected.team]].players)[selected.idx], team: cfg.teams[codes[selected.team]].name, role: tactics[codes[selected.team]]?.roles[selected.idx] } : null
   const shape = codes.map((c, i) => ({ c, i, p: tactics[c] })).filter((x) => x.p)
@@ -135,6 +139,8 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
   return (
     <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100%_-_440px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
       <div ref={headerRef} className="bg-background/85 sticky top-0 z-30 min-w-0 border-b backdrop-blur-md px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
+        <div className="relative" onPointerEnter={(e) => { if (e.pointerType === "mouse" && applied.src !== "live") setScrub(true) }}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse" && !dragging) setScrub(false) }}>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
@@ -148,7 +154,12 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           <Button variant="outline" size="icon-lg" aria-label="Toggle light or dark mode" className="hidden sm:inline-flex" onClick={() => setThemeMode(dark ? "light" : "dark")}>{dark ? <Sun /> : <Moon />}</Button>
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
-        <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
+        <div className="-mb-1 cursor-pointer py-2" onClick={() => setScrub((o) => !o)} title="Jump to a minute">
+          <div className="h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
+        </div>
+        {applied.src !== "live" && <TimeScrubber open={scrub} value={Math.floor((stats?.t ?? startMin * 60) / 60)} max={cfg.match.duration_min}
+          onDragging={setDragging} onCommit={(m) => { setStartMin(m); setRunId((n) => n + 1); setSelected(null); setBenchSel(null) }} />}
+      </div>
         <div ref={pitchBox} className="border-border relative overflow-hidden rounded-2xl border shadow-2xl will-change-[opacity,max-height]"
           style={mobile && pitchH ? {
             opacity: hidePitch ? 0 : 1, maxHeight: hidePitch ? 0 : pitchH, visibility: hidePitch ? "hidden" : "visible",
