@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Activity, Box, Settings2 } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Activity, Box, ChevronUp, Settings2 } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
@@ -26,6 +26,25 @@ const initial: Settings = {
   metric: params.get("metric") ?? "", src: params.get("src") ?? "stream", speed: params.get("speed") ?? "60", seed: params.get("seed") ?? "7",
 }
 
+/** Phones only: 0 at the top of the page, 1 once scrolled past `distance` px (smoothstep-eased). */
+function useScrollCollapse(distance: number) {
+  const [p, setP] = useState(0)
+  const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 1023px)").matches)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)")
+    const onMq = () => setMobile(mq.matches)
+    mq.addEventListener("change", onMq)
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => { const x = Math.min(1, Math.max(0, window.scrollY / distance)); setP(x * x * (3 - 2 * x)) })
+    }
+    window.addEventListener("scroll", onScroll, { passive: true }); onScroll()
+    return () => { mq.removeEventListener("change", onMq); window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf) }
+  }, [distance])
+  return { p: mobile ? p : 0, mobile }
+}
+
 export default function App() {
   const [cfg, setCfg] = useState<Config | null>(null)
   useEffect(() => { fetch("/api/config").then((r) => r.json()).then(setCfg) }, [])
@@ -46,6 +65,16 @@ function Match({ cfg }: { cfg: Config }) {
   const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals } = useMatchStream(applied, runId)
   const info = ball ? describeBall(ball, cfg, codes) : null
   const narrow = useMemo(() => window.innerWidth < 480, [])
+  const { p: collapse, mobile } = useScrollCollapse(260)
+  const pitchBox = useRef<HTMLDivElement>(null)
+  const [pitchH, setPitchH] = useState(0)
+  useEffect(() => {
+    const canvas = pitchBox.current?.querySelector('canvas')
+    if (!canvas) return
+    const ro = new ResizeObserver(() => setPitchH(canvas.offsetHeight + 2))
+    ro.observe(canvas); setPitchH(canvas.offsetHeight + 2)
+    return () => ro.disconnect()
+  }, [view3d])
 
   const apply = () => {
     const [c, i] = draft.player ? draft.player.split(":") : []
@@ -74,7 +103,7 @@ function Match({ cfg }: { cfg: Config }) {
   )
 
   return (
-    <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
+    <div style={mobile ? { minHeight: "calc(100dvh + 300px)" } : undefined} className="mx-auto grid max-w-[1180px] [overflow-anchor:none] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
       <div className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
           <Popover>
@@ -90,10 +119,12 @@ function Match({ cfg }: { cfg: Config }) {
                 score={[stats?.teams[codes[0]].goals ?? 0, stats?.teams[codes[1]].goals ?? 0]} minute={stats?.minute ?? 0} />
             </PopoverContent>
           </Popover>
+          {mobile && collapse > 0.9 && <Button variant="outline" size="icon-lg" aria-label="Show pitch" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}><ChevronUp /></Button>}
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><Settings2 /></Button>
         </div>
         <div className="my-2 h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
-        <div className="border-border relative overflow-hidden rounded-2xl border shadow-2xl">
+        <div ref={pitchBox} className="border-border relative overflow-hidden rounded-2xl border shadow-2xl will-change-[opacity,max-height]"
+          style={mobile && pitchH ? { opacity: 1 - collapse, maxHeight: `${pitchH * (1 - collapse)}px`, visibility: collapse > 0.98 ? "hidden" : "visible" } : undefined}>
           <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => cfg.teams[c].players)} layers={layers} focus={focus} selected={selected} onSelect={setSelected} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 left-2 hidden sm:inline-flex">{status}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur">Drag to rotate · double-tap to reset</Badge>}
