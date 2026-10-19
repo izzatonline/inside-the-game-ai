@@ -67,6 +67,14 @@ function Match({ cfg }: { cfg: Config }) {
   const narrow = useMemo(() => window.innerWidth < 480, [])
   const { p: collapse, mobile } = useScrollCollapse(260)
   const pitchBox = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {  // tab bar sticks right below the (variable-height) pinned header
+    const el = headerRef.current
+    if (!el) return
+    const set = () => document.documentElement.style.setProperty("--hdr", `${el.offsetHeight}px`)
+    const ro = new ResizeObserver(set); ro.observe(el); set()
+    return () => ro.disconnect()
+  }, [])
   const [pitchH, setPitchH] = useState(0)
   useEffect(() => {
     const canvas = pitchBox.current?.querySelector('canvas')
@@ -104,7 +112,7 @@ function Match({ cfg }: { cfg: Config }) {
 
   return (
     <div style={mobile ? { minHeight: "calc(100dvh + 300px)" } : undefined} className="mx-auto grid max-w-[1180px] [overflow-anchor:none] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
-      <div className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
+      <div ref={headerRef} className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
           <Popover>
             <PopoverTrigger render={<Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" aria-label="Show match momentum" />}>
@@ -144,7 +152,9 @@ function Match({ cfg }: { cfg: Config }) {
       <div className="min-w-0 px-3 pt-1.5 pb-[calc(24px+env(safe-area-inset-bottom))] lg:px-0 lg:pt-4">
         <div className="mb-3 lg:hidden">{controls}</div>
         <Tabs defaultValue="moments">
-          <TabsList className="w-full"><TabsTrigger value="moments">Moments</TabsTrigger><TabsTrigger value="tactics">Tactics</TabsTrigger><TabsTrigger value="stats">Stats</TabsTrigger></TabsList>
+          <div className="bg-background sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
+            <TabsList className="w-full"><TabsTrigger value="moments">Moments</TabsTrigger><TabsTrigger value="tactics">Tactics</TabsTrigger><TabsTrigger value="stats">Stats</TabsTrigger></TabsList>
+          </div>
           <TabsContent value="moments" className="space-y-2">
             {recap && <Card size="sm" className="bg-emerald-500/10"><CardContent><h3 className="font-semibold">{recap.headline}</h3><p className="text-sm">{recap.body}</p><span className="text-muted-foreground text-[11px]">{recap.source === "llm" ? "AI-written recap" : "rules-based recap"}</span></CardContent></Card>}
             {overlays.length === 0 && <p className="text-muted-foreground py-6 text-center text-sm">Waiting for the first key moment…</p>}
