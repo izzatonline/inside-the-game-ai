@@ -8,6 +8,11 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 from .models import Event, Moment
 from .tactics import TacticsAnalyzer
 
+def minute_label(m: int) -> str:
+    """Stoppage time reads 90+3', not 93'."""
+    return str(m) if m <= 90 else f"90+{m - 90}"
+
+
 WINDOW_S = 300.0  # rolling window for pressure / momentum
 SPRINT_KMH = 33.0
 SWING_SHARE = 0.70  # pressure share needed to call a momentum swing
@@ -53,7 +58,7 @@ class PlayerStats:
 
 
 class MatchState:
-    def __init__(self, teams: Dict[str, str]):
+    def __init__(self, teams: Dict[str, str], rosters: Optional[Dict[str, List[str]]] = None):
         self.codes = list(teams)
         self.teams = {c: TeamStats(n) for c, n in teams.items()}
         self.players: Dict[str, PlayerStats] = {}
@@ -68,12 +73,10 @@ class MatchState:
         self.goal_log: List[Dict[str, Any]] = []
         self.card_log: List[Dict[str, Any]] = []
         self.sub_log: List[Dict[str, Any]] = []
-        from .generator import TEAMS  # rosters give the analyzer names only, never roles
-
+        # rosters give the analyzer names only, never roles
         self.tactics = TacticsAnalyzer(
             self.codes, teams,
-            {c: [n for n, _ in TEAMS[c]["players"]] if c in TEAMS else [f"P{i + 1}" for i in range(11)]
-             for c in self.codes})
+            {c: list((rosters or {}).get(c) or [f"P{i + 1}" for i in range(11)]) for c in self.codes})
 
     # ---- helpers -------------------------------------------------------
     def _player(self, name: str, team: str) -> PlayerStats:
@@ -109,7 +112,7 @@ class MatchState:
                 team: str, **facts: Any) -> Moment:
         self._n += 1
         base = {
-            "minute": ev.minute, "team": team, "team_name": self.teams[team].name,
+            "minute": minute_label(ev.minute), "team": team, "team_name": self.teams[team].name,
             "player": player,
         }
         base.update(facts)
@@ -142,6 +145,11 @@ class MatchState:
                 self.card_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player, "card": "yellow"})
                 return [self._moment(ev, "card", 0.6, ev.player, ev.team, card="yellow")]
             return out
+        if ev.type == "var":
+            home, away = self.codes
+            return [self._moment(ev, "var", 0.9 if ev.meta["kind"] in ("no_goal", "penalty_awarded") else 0.7,
+                                 ev.player or None, ev.team, var_kind=ev.meta["kind"],
+                                 score_home=self.teams[home].goals, score_away=self.teams[away].goals)]
         if ev.type == "substitution":
             self.tactics.rosters[ev.team][ev.meta["slot"]] = ev.player  # roles now belong to the new player
             self.sub_log.append({"minute": ev.minute, "team": ev.team, "slot": ev.meta["slot"], "player_in": ev.player,
@@ -196,7 +204,7 @@ class MatchState:
                 self.teams[self._opp(ev.team)].saves += 1
             elif ev.outcome == "blocked":
                 ts.blocked += 1
-            elif ev.outcome == "off_target":
+            elif ev.outcome in ("off_target", "disallowed"):
                 ts.off_target += 1
             weight = 2 + 6 * xg
         elif ev.type in ("tackle", "interception"):
@@ -244,10 +252,10 @@ class MatchState:
                 score_home=self.teams[home].goals, score_away=self.teams[away].goals,
                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-"
                           f"{self.teams[away].goals} {self.teams[away].name}",
-                assist=assist, player_goals=ps.goals,
+                assist=assist, player_goals=ps.goals, penalty=bool(ev.meta.get("penalty")),
                 pressure_pct=int(round(share * 100)), against_run=share < 0.35,
             )]
-        if xg >= 0.25:
+        if xg >= 0.25 and ev.outcome != "disallowed":
             return [self._moment(
                 ev, "big_chance", min(0.9, 0.45 + xg), ev.player, ev.team,
                 xg=xg, xg_pct=int(round(xg * 100)), outcome=ev.outcome,

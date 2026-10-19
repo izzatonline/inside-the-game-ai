@@ -7,15 +7,15 @@ from __future__ import annotations
 import asyncio
 import json
 import pathlib
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .agents import MatchPipeline
 from .bus import Broadcaster, make_source
-from .generator import TEAMS, generate_match
+from .generator import DEFAULT_MATCH, MATCHES, MatchSpec, generate_match
 from .llm import get_llm
 from .models import Profile
 from .templates import LANGUAGES
@@ -29,16 +29,27 @@ try:  # Agent Framework workflow when installed (Python 3.10+); plain agents oth
     _runner = MafRunner(_llm)
 except ImportError:
     _runner = None
-_live: Dict[int, Broadcaster] = {}
-_caches: Dict[int, dict] = {}  # narration cache per match seed, shared by all viewers
+_live: Dict[Tuple[str, int], Broadcaster] = {}
+_caches: Dict[Tuple[str, int], dict] = {}  # narration cache per (match, seed), shared by all viewers
 
 
-def _roster():
+def _spec(match: str) -> MatchSpec:
+    if match not in MATCHES:
+        raise HTTPException(404, f"unknown match '{match}'")
+    return MATCHES[match]
+
+
+def _pipeline(spec: MatchSpec, seed: int) -> MatchPipeline:
+    return MatchPipeline({c: v["name"] for c, v in spec.teams.items()}, _llm, _caches.setdefault((spec.id, seed), {}), _runner,
+                         rosters={c: [n for n, _ in v["players"]] for c, v in spec.teams.items()})
+
+
+def _roster(spec: MatchSpec):
     return {c: {"name": v["name"], "players": [n for n, _ in v["players"]],
                 "slots": [list(o) for o, _ in v["slots"]],
                 "staff": {"coach": v["staff"]["coach"], "assistants": v["staff"]["assistants"],
                           "subs": [{"name": n, "pos": p, "number": k} for n, p, k in v["staff"]["subs"]]}}
-            for c, v in TEAMS.items()}
+            for c, v in spec.teams.items()}
 
 
 async def _step(pipe, ev, profile, last_stats: float):
@@ -82,30 +93,38 @@ def index():
     return FileResponse(page)
 
 
+@app.get("/api/matches")
+def matches():
+    return [{"id": m.id, "title": m.title, "subtitle": m.subtitle, "blurb": m.blurb,
+             "duration_min": round(m.duration / 60), "scripted": m.scenario is not None,
+             "teams": [{"code": c, "name": v["name"]} for c, v in m.teams.items()]} for m in MATCHES.values()]
+
+
 @app.get("/api/config")
-def config():
+def config(match: str = DEFAULT_MATCH):
     return {
         "llm": _llm.name, "orchestration": "agent-framework" if _runner else "plain",
         "languages": LANGUAGES,
-        "teams": _roster(),
+        "match": {"id": _spec(match).id, "title": _spec(match).title, "subtitle": _spec(match).subtitle},
+        "teams": _roster(_spec(match)),
     }
 
 
 @app.get("/api/match")
-def match(seed: int = 7):
+def match_events(seed: int = 7, match: str = DEFAULT_MATCH):
     """Raw synthetic events (the 'data innovation' output), machine-readable."""
-    return [e.to_dict() for e in generate_match(seed)]
+    return [e.to_dict() for e in generate_match(seed, match=_spec(match).id)]
 
 
 @app.get("/api/stream")
 async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str = "casual",
                  team: Optional[str] = None, player: Optional[str] = None,
-                 metric: Optional[str] = None):
+                 metric: Optional[str] = None, match: str = DEFAULT_MATCH):
     profile = Profile(mode=mode if mode in ("casual", "analyst") else "casual", lang=lang,
                       team=team or None, player=player or None, metric=metric or None)
-    events = generate_match(seed)
-    pipe = MatchPipeline({c: v["name"] for c, v in TEAMS.items()}, _llm,
-                         _caches.setdefault(seed, {}), _runner)
+    spec = _spec(match)
+    events = generate_match(seed, match=spec.id)
+    pipe = _pipeline(spec, seed)
 
     async def gen():
         prev_t, last_stats = 0.0, -99.0
@@ -124,15 +143,16 @@ async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str
 @app.get("/api/live")
 async def live(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str = "casual",
                team: Optional[str] = None, player: Optional[str] = None,
-               metric: Optional[str] = None):
+               metric: Optional[str] = None, match: str = DEFAULT_MATCH):
     """Event-driven path: viewers subscribe to the shared ingest bus (in-memory or Event Hubs)."""
     profile = Profile(mode=mode if mode in ("casual", "analyst") else "casual", lang=lang,
                       team=team or None, player=player or None, metric=metric or None)
-    if seed not in _live or _live[seed].task.done() and not _live[seed].history:
-        _live[seed] = Broadcaster(make_source(seed, speed))
-    bc = _live[seed]
-    pipe = MatchPipeline({c: v["name"] for c, v in TEAMS.items()}, _llm,
-                         _caches.setdefault(seed, {}), _runner)
+    spec = _spec(match)
+    key = (spec.id, seed)
+    if key not in _live or _live[key].task.done() and not _live[key].history:
+        _live[key] = Broadcaster(make_source(seed, speed, spec.id))
+    bc = _live[key]
+    pipe = _pipeline(spec, seed)
     history, q = bc.subscribe()
     catchup = []
     for ev in history:  # catch-up: rebuild state silently

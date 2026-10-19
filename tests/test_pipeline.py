@@ -209,3 +209,33 @@ def test_substitution_moment_and_tactics_roster_update():
     assert sum(o.kind == "substitution" for o in out) == 6
     sub = next(o for o in out if o.kind == "substitution")
     assert "replace" in sub.body
+
+
+def test_riverside_scripted_storyline():
+    ev = generate_match(7, match="riverside")
+    assert ev[-1].meta["score"] == {"MER": 3, "TID": 2}
+    goals = [(e.minute, e.team, e.player) for e in ev if e.type == "shot" and e.outcome == "goal"]
+    assert [g[:2] for g in goals] == [(18, "MER"), (25, "TID"), (37, "MER"), (67, "MER"), (90, "TID")]
+    assert any(e.type == "shot" and e.outcome == "disallowed" for e in ev)
+    assert [e.meta["kind"] for e in ev if e.type == "var"] == ["goal_check", "no_goal", "penalty_check", "penalty_awarded"]
+    assert any(e.type == "tracking" and e.meta["phase"] == "penalty" for e in ev)
+    assert sum(e.type == "substitution" for e in ev) == 10 and sum(e.type == "card" for e in ev) == 3
+    assert all(a.t <= b.t for a, b in zip(ev, ev[1:]))
+
+
+def test_riverside_story_in_the_pipeline_and_dominance():
+    from itg.generator import MATCHES
+
+    spec = MATCHES["riverside"]
+    names = {c: v["name"] for c, v in spec.teams.items()}
+    rosters = {c: [n for n, _ in v["players"]] for c, v in spec.teams.items()}
+    pipe = MatchPipeline(names, OfflineLLM(), rosters=rosters)
+    out = [o for e in generate_match(7, match="riverside") for o in pipe.process(e, Profile(mode="analyst"))]
+    kinds = [o.kind for o in out]
+    assert kinds.count("goal") == 5 and kinds.count("var") == 4 and kinds.count("card") == 3
+    assert any(o.kind == "goal" and "penalty spot" in o.body for o in out)
+    assert any(o.kind == "var" and "offside" in o.body and "86'" in o.body for o in out)
+    snap = pipe.state.snapshot()["teams"]
+    assert snap["MER"]["possession_pct"] >= 62  # the dominant side keeps the ball
+    r = pipe.recap(Profile())
+    assert r["headline"].startswith("Full time: Meridian FC 3-2 Tidewater Town")

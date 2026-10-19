@@ -44,7 +44,7 @@ async def trace(runner: MafRunner, job: Job, label: str) -> None:
 
 
 async def main(seed: int) -> None:
-    state = MatchState({c: v["name"] for c, v in TEAMS.items()})
+    state = MatchState({c: v["name"] for c, v in TEAMS.items()}, {c: [n for n, _ in v["players"]] for c, v in TEAMS.items()})
     goal = next(m for e in generate_match(seed) for m in state.ingest(e) if m.kind == "goal")
     profile = Profile(mode="analyst")
     print(f"Moment: {goal.kind} {goal.id} at {goal.minute}' ({goal.facts['player']})")

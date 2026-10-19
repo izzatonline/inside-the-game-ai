@@ -75,6 +75,10 @@ class PersonalizerAgent:
 
 
 def _template_key(m: Moment) -> str:
+    if m.kind == "goal" and m.facts.get("penalty"):
+        return "goal_penalty"
+    if m.kind == "var":
+        return "var_" + m.facts["var_kind"]
     return "goal_against_run" if m.kind == "goal" and m.facts.get("against_run") else m.kind
 
 
@@ -149,10 +153,11 @@ class RecapAgent:
             if facts["comeback"]:
                 text += t["comeback"]
         xg_h, xg_a = facts["xg_home"], facts["xg_away"]
-        text += _fmt(t["detail"], {
-            "poss_team": facts["home"] if facts["poss_home"] >= facts["poss_away"] else facts["away"],
-            "poss_pct": max(facts["poss_home"], facts["poss_away"]),
-            "xg_team": facts["home"] if xg_h >= xg_a else facts["away"], "xg_h": xg_h, "xg_a": xg_a})
+        poss_team = facts["home"] if facts["poss_home"] >= facts["poss_away"] else facts["away"]
+        xg_team = facts["home"] if xg_h >= xg_a else facts["away"]
+        text += _fmt(t["detail_same" if poss_team == xg_team else "detail"], {
+            "poss_team": poss_team, "poss_pct": max(facts["poss_home"], facts["poss_away"]),
+            "xg_team": xg_team, "xg_h": xg_h, "xg_a": xg_a})
         return text
 
     def run(self, state: MatchState, top: List[Tuple[Moment, Overlay]], p: Profile) -> Dict[str, Any]:
@@ -228,10 +233,10 @@ class MatchPipeline:
     """Orchestrates the agents for one viewer. Interpretation is shared logic in MatchState."""
 
     def __init__(self, team_names: Dict[str, str], llm=None, cache: Optional[dict] = None,
-                 runner=None) -> None:
+                 runner=None, rosters: Optional[Dict[str, List[str]]] = None) -> None:
         self.llm = llm or get_llm()
         self.runner = runner  # optional itg.maf.MafRunner: Explainer->Narrator->FactChecker workflow
-        self.state = MatchState(team_names)
+        self.state = MatchState(team_names, rosters)
         self.personalizer = PersonalizerAgent()
         self.explainer = ExplainerAgent(self.llm)
         self.narrator = NarratorAgent(self.llm)

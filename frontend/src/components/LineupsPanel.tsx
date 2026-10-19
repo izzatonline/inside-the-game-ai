@@ -1,3 +1,4 @@
+import { fmtMinute } from "@/lib/format"
 import { ArrowDown, ArrowUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -62,7 +63,7 @@ export function LineupsPanel({ cfg, codes, tactics, subLog, cards, goals }: Prop
                       <li key={sb.number} className="grid grid-cols-[1.6rem_1fr_auto] items-center gap-2 text-sm">
                         <span className="text-muted-foreground text-xs tabular-nums">{sb.number}</span>
                         <span className={on ? "font-semibold" : "text-muted-foreground"}>{sb.name} <span className="text-muted-foreground text-[11px]">{sb.pos}</span></span>
-                        {on ? <Badge variant="secondary" className="gap-1 text-[11px]"><ArrowUp className="size-3 text-emerald-500" />{on.minute}' <span className="text-muted-foreground">for</span> {surname(on.player_out)}</Badge> : <span className="text-muted-foreground text-[11px]">unused</span>}
+                        {on ? <Badge variant="secondary" className="gap-1 text-[11px]"><ArrowUp className="size-3 text-emerald-500" />{fmtMinute(on.minute)}' <span className="text-muted-foreground">for</span> {surname(on.player_out)}</Badge> : <span className="text-muted-foreground text-[11px]">unused</span>}
                       </li>
                     )
                   })}

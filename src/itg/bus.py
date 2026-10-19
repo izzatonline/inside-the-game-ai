@@ -14,13 +14,13 @@ import json
 import os
 from typing import AsyncIterator, List, Set
 
-from .generator import generate_match
+from .generator import DEFAULT_MATCH, generate_match
 from .models import Event
 
 
-async def generator_source(seed: int = 7, speed: float = 60.0) -> AsyncIterator[Event]:
+async def generator_source(seed: int = 7, speed: float = 60.0, match: str = DEFAULT_MATCH) -> AsyncIterator[Event]:
     prev = 0.0
-    for ev in generate_match(seed):
+    for ev in generate_match(seed, match=match):
         await asyncio.sleep(max(0.0, min(ev.t - prev, 60)) / max(speed, 1))
         prev = ev.t
         yield ev
@@ -83,7 +83,7 @@ class Broadcaster:
         self.subscribers.discard(q)
 
 
-def make_source(seed: int, speed: float) -> AsyncIterator[Event]:
+def make_source(seed: int, speed: float, match: str = DEFAULT_MATCH) -> AsyncIterator[Event]:
     if os.environ.get("ITG_INGEST") == "eventhubs":
         return eventhubs_source()
-    return generator_source(seed, speed)
+    return generator_source(seed, speed, match)

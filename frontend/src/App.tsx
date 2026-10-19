@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, Box, ChevronDown, ChevronUp, Moon, Settings2, Sun } from "lucide-react"
+import { Activity, Box, ChevronDown, ChevronUp, Moon, PanelLeft, Settings2, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { PitchCanvas } from "@/components/PitchCanvas"
@@ -17,15 +17,18 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { AppSidebar } from "@/components/AppSidebar"
+import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { useMatchStream } from "@/hooks/useMatchStream"
+import { fmtMinute } from "@/lib/format"
 import { useTheme } from "@/hooks/useTheme"
 import { describeBall } from "@/lib/ball"
 import { TEAM_COLORS } from "@/lib/theme"
-import type { BenchPick, Config, Selected, Settings } from "@/lib/types"
+import type { BenchPick, Config, MatchInfo, Selected, Settings } from "@/lib/types"
 
 const params = new URLSearchParams(location.search)
 const initial: Settings = {
-  mode: params.get("mode") ?? "casual", lang: params.get("lang") ?? "en", team: params.get("team") ?? "", player: "",
+  match: params.get("match") ?? "", mode: params.get("mode") ?? "casual", lang: params.get("lang") ?? "en", team: params.get("team") ?? "", player: "",
   metric: params.get("metric") ?? "", src: params.get("src") ?? "stream", speed: params.get("speed") ?? "60", seed: params.get("seed") ?? "7",
 }
 
@@ -42,13 +45,30 @@ function useIsMobile() {
 }
 
 export default function App() {
+  const [matches, setMatches] = useState<MatchInfo[] | null>(null)
+  const [matchId, setMatchId] = useState(params.get("match") ?? "")
   const [cfg, setCfg] = useState<Config | null>(null)
-  useEffect(() => { fetch("/api/config").then((r) => r.json()).then(setCfg) }, [])
-  if (!cfg) return <div className="space-y-3 p-4"><Skeleton className="h-14 w-full" /><Skeleton className="aspect-[105/68] w-full" /></div>
-  return <Match cfg={cfg} />
+  const theme = useTheme()
+  useEffect(() => {
+    fetch("/api/matches").then((r) => r.json()).then((list: MatchInfo[]) => { setMatches(list); setMatchId((cur) => (list.some((m) => m.id === cur) ? cur : list[0].id)) })
+  }, [])
+  useEffect(() => {
+    if (!matchId) return
+    setCfg(null)
+    fetch(`/api/config?match=${matchId}`).then((r) => r.json()).then(setCfg)
+  }, [matchId])
+  if (!matches || !cfg) return <div className="space-y-3 p-4"><Skeleton className="h-14 w-full" /><Skeleton className="aspect-[105/77.5] w-full" /></div>
+  return (
+    <SidebarProvider>
+      <AppSidebar matches={matches} matchId={matchId} onSelect={setMatchId} theme={theme.mode} onTheme={theme.setMode} />
+      <SidebarInset>
+        <Match key={matchId} cfg={cfg} matchId={matchId} theme={theme} />
+      </SidebarInset>
+    </SidebarProvider>
+  )
 }
 
-function Match({ cfg }: { cfg: Config }) {
+function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: ReturnType<typeof useTheme> }) {
   const codes = Object.keys(cfg.teams)
   const [draft, setDraft] = useState(initial)
   const [applied, setApplied] = useState(initial)
@@ -58,12 +78,13 @@ function Match({ cfg }: { cfg: Config }) {
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") === "3d")
-  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream(applied, runId, cfg)
+  const { frames, stats, tactics, overlays, recap, status, toast, ball, series, goals, cards, subLog, bench, roster } = useMatchStream({ ...applied, match: matchId }, runId, cfg)
+  const { toggleSidebar } = useSidebar()
   const [benchSel, setBenchSel] = useState<BenchPick>(null)
   const info = ball ? describeBall(ball, cfg, codes) : null
   const narrow = useMemo(() => window.innerWidth < 480, [])
   const mobile = useIsMobile()
-  const { mode: themeMode, setMode: setThemeMode, dark } = useTheme()
+  const { mode: themeMode, setMode: setThemeMode, dark } = theme
   const [momentumOpen, setMomentumOpen] = useState(false)
   const [pitchHidden, setPitchHidden] = useState(false)
   const hidePitch = mobile && pitchHidden
@@ -112,13 +133,14 @@ function Match({ cfg }: { cfg: Config }) {
   )
 
   return (
-    <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100vw_-_480px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
+    <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100%_-_440px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
       <div ref={headerRef} className="bg-background sticky top-0 z-30 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">{stats?.minute ?? 0}'<Activity className="text-muted-foreground size-3" /></div></div>
+            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
             <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
             </Card>

@@ -9,14 +9,15 @@ import itertools
 import json
 import math
 import random
-from typing import Dict, List, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 from .models import Event
 
 # Slots are (out-of-possession xy, in-possession xy) in the team's own attacking frame:
 # x 0 = own goal .. 100 = opponent goal, y 0..100 = left..right. Roles are NOT exported:
 # the tactics analyzer must infer them from positions alone.
-TEAMS: Dict[str, Dict] = {
+_COASTAL_TEAMS: Dict[str, Dict] = {
     "NOR": {
         "name": "Northbridge FC",
         "tactic": {"line": 8.0, "width": 1.0, "press": 0.8, "long": 0.08},  # high line, press, short build-up
@@ -64,6 +65,105 @@ TEAMS: Dict[str, Dict] = {
     },
 }
 
+
+
+@dataclass
+class MatchSpec:
+    """A simulated match: its two clubs plus (optionally) a scripted storyline."""
+
+    id: str
+    title: str
+    subtitle: str
+    blurb: str
+    teams: Dict[str, Dict]
+    duration: float = 5400.0
+    scenario: Optional[Dict[str, Any]] = None
+
+
+MATCHES: Dict[str, MatchSpec] = {}
+MATCHES["coastal"] = MatchSpec(
+    "coastal", "Coastal Derby", "Seaview Park · 90 min", "Open game, shape battle: high press v low block",
+    _COASTAL_TEAMS)
+DEFAULT_MATCH = "coastal"
+TEAMS = MATCHES[DEFAULT_MATCH].teams  # default match, kept for existing callers
+
+
+_RIVERSIDE_TEAMS: Dict[str, Dict] = {
+    "MER": {
+        "name": "Meridian FC",
+        "tactic": {"line": 10.0, "width": 1.05, "press": 0.9, "long": 0.05},  # dominant, high line, short passing
+        "staff": {
+            "coach": "Conrad Whitlock", "assistants": ["Bruno Esteves", "Yelena Marsh"],
+            "subs": [("Ben Hargrove", "GK", 12), ("Luis Mancera", "DF", 13), ("Niklas Aalto", "DF", 14),
+                     ("Oren Sasson", "MF", 15), ("Ruben Calvet", "MF", 16), ("Anil Prakash", "MF", 17),
+                     ("Theo Marquand", "FW", 18), ("Felix Lorenz", "FW", 19), ("Dmitri Kasim", "FW", 20)],
+        },
+        "players": [
+            ("Idris Calloway", "GK"), ("Tomas Varga", "DF"), ("Emeka Obi", "DF"), ("Rafael Quintero", "DF"),
+            ("Soren Lindahl", "DF"), ("Kofi Danso", "MF"), ("Mattias Holm", "MF"), ("Dario Ferrucci", "MF"),
+            ("Yusuf Karaca", "MF"), ("Jamie Rutherford", "MF"), ("Casper Wolfe", "FW"),
+        ],
+        "slots": [  # 4-1-4-1
+            ((5, 50), (16, 50)),
+            ((30, 86), (52, 84)), ((24, 62), (34, 62)), ((24, 38), (34, 38)), ((30, 14), (52, 16)),
+            ((40, 50), (48, 50)),
+            ((62, 86), (78, 88)), ((56, 62), (66, 60)), ((56, 38), (66, 40)), ((62, 14), (78, 12)),
+            ((78, 50), (88, 50)),
+        ],
+    },
+    "TID": {
+        "name": "Tidewater Town",
+        "tactic": {"line": -12.0, "width": 1.0, "press": 0.25, "long": 0.32},  # deep five-man block, long counters
+        "staff": {
+            "coach": "Hamish Dunleavy", "assistants": ["Rory Quill", "Ines Barros"],
+            "subs": [("Oscar Fenwick", "GK", 12), ("Piers Garrow", "DF", 13), ("Linus Halloran", "DF", 14),
+                     ("Azim Rahal", "MF", 15), ("Abel Okoro", "MF", 16), ("Cormac Reyes", "MF", 17),
+                     ("Gideon Pryce", "FW", 18), ("Leo Marchetti", "FW", 19), ("Jory Bates", "FW", 20)],
+        },
+        "players": [
+            ("Walter Penhale", "GK"), ("Callum Ashby", "DF"), ("Isaac Thorne", "DF"), ("Marcus Bellweather", "DF"),
+            ("Declan Rudd", "DF"), ("Ellis Cartmel", "DF"), ("Tobias Wren", "MF"), ("Nolan Pike", "MF"),
+            ("Dominic Hale", "MF"), ("Harlan Voss", "MF"), ("Rory Blackwood", "FW"),
+        ],
+        "slots": [  # 5-4-1
+            ((5, 50), (12, 50)),
+            ((26, 90), (46, 88)), ((20, 68), (26, 66)), ((18, 50), (24, 50)), ((20, 32), (26, 34)), ((26, 10), (46, 12)),
+            ((40, 78), (52, 76)), ((38, 58), (46, 56)), ((38, 42), (46, 44)), ((40, 22), (52, 24)),
+            ((58, 50), (66, 50)),
+        ],
+    },
+}
+
+# Inspired by a real-world storyline (a dominant side, an early equaliser, a disallowed goal and a late penalty)
+# but with invented clubs, players and venue, and shifted minutes. Everything here is synthetic.
+_M = 60.0
+MATCHES["riverside"] = MatchSpec(
+    "riverside", "Riverside Cup Tie", "Riverside Arena · 90+9", "Total control, a VAR drama and a late penalty",
+    _RIVERSIDE_TEAMS, duration=99 * _M,
+    scenario={
+        "strength": {"MER": 1.5, "TID": 0.78},
+        "shot_rate": 0.03,
+        "script": [
+            {"t": 17 * _M + 20, "do": "goal", "team": "MER", "scorer": "Jamie Rutherford", "assist": "Mattias Holm", "xg": 0.34},
+            {"t": 24 * _M + 10, "do": "goal", "team": "TID", "scorer": "Tobias Wren", "assist": "Callum Ashby", "xg": 0.22},
+            {"t": 36 * _M + 40, "do": "goal", "team": "MER", "scorer": "Casper Wolfe", "assist": "Dario Ferrucci", "xg": 0.41},
+            {"t": 66 * _M + 30, "do": "goal", "team": "MER", "scorer": "Casper Wolfe", "assist": "Jamie Rutherford", "xg": 0.52},
+            {"t": 72 * _M, "do": "card", "team": "TID", "player": "Callum Ashby"},
+            {"t": 84 * _M + 50, "do": "disallowed", "team": "MER", "scorer": "Casper Wolfe", "assist": "Dario Ferrucci", "xg": 0.45, "reason": "offside"},
+            {"t": 87 * _M + 30, "do": "penalty", "team": "TID", "taker": "Gideon Pryce", "fouler": "Rafael Quintero"},
+            {"t": 93 * _M, "do": "card", "team": "MER", "player": "Rafael Quintero"},
+            {"t": 97 * _M + 30, "do": "card", "team": "TID", "player": "Isaac Thorne"},
+        ],
+        "subs": [
+            (50, "MER", "Yusuf Karaca", "Oren Sasson"), (61, "MER", "Soren Lindahl", "Niklas Aalto"),
+            (77, "MER", "Mattias Holm", "Theo Marquand"), (77, "MER", "Jamie Rutherford", "Felix Lorenz"),
+            (77, "MER", "Tomas Varga", "Luis Mancera"),
+            (70, "TID", "Harlan Voss", "Abel Okoro"), (70, "TID", "Nolan Pike", "Azim Rahal"),
+            (77, "TID", "Rory Blackwood", "Gideon Pryce"), (77, "TID", "Tobias Wren", "Leo Marchetti"),
+            (91, "TID", "Marcus Bellweather", "Piers Garrow"),
+        ],
+    })
+
 _ZONE_WEIGHTS = {
     "def": {"GK": 1.0, "DF": 6.0, "MF": 3.0, "FW": 0.5},
     "mid": {"GK": 0.1, "DF": 2.0, "MF": 6.0, "FW": 2.0},
@@ -75,12 +175,12 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
-def _frame_positions(codes, t, poss, bx_rel, by_rel):
+def _frame_positions(codes, t, poss, bx_rel, by_rel, teams, forced_carrier=None):
     """22 player positions (absolute 0-100 pitch frame; first team attacks +x) around the ball."""
     out = []
     info = {"carrier": 1, "gap": 99.0, "opp_gap": 99.0}
     for c in codes:
-        tac, slots = TEAMS[c]["tactic"], TEAMS[c]["slots"]
+        tac, slots = teams[c]["tactic"], teams[c]["slots"]
         has = c == poss
         bx, by = (bx_rel, by_rel) if has else (100 - bx_rel, 100 - by_rel)  # ball in c's frame
         pts = []
@@ -100,8 +200,9 @@ def _frame_positions(codes, t, poss, bx_rel, by_rel):
         near = sorted(range(1, 11), key=dm)
         if has:
             cand = sorted(range(0 if bx < 10 else 1, 11), key=dm)  # the keeper can hold it deep
-            info["carrier"], info["gap"] = cand[0], dm(cand[1])
-            pts[cand[0]] = [bx, by]
+            carrier = cand[0] if forced_carrier is None else forced_carrier  # scripted takers are known
+            info["carrier"], info["gap"] = carrier, dm(next(i for i in cand if i != carrier))
+            pts[carrier] = [bx, by]
         else:
             for i in near[:2]:  # the pressing pair close the ball down
                 k = 0.55 * tac["press"]
@@ -115,11 +216,17 @@ def _frame_positions(codes, t, poss, bx_rel, by_rel):
     return out, info
 
 
-def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = True) -> List[Event]:
+def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bool = True,
+                   match: str = DEFAULT_MATCH) -> List[Event]:
+    spec = MATCHES[match]
+    teams, scen = spec.teams, spec.scenario
+    duration = duration or spec.duration
     rng = random.Random(seed)
-    codes = list(TEAMS)
+    codes = list(teams)
     other = {codes[0]: codes[1], codes[1]: codes[0]}
     strength = {c: rng.uniform(0.95, 1.1) for c in codes}
+    if scen:
+        strength.update(scen.get("strength", {}))
     # Spells where one side dominates: gives the explainer real momentum swings to find.
     phases: List[Tuple[float, float, str]] = []
     for _ in range(4):
@@ -128,7 +235,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
 
     events: List[Event] = []
     ids = itertools.count(1)
-    roster = {c: list(TEAMS[c]["players"]) for c in codes}  # changes when substitutions happen
+    roster = {c: list(teams[c]["players"]) for c in codes}  # changes when substitutions happen
 
     def pick(team: str, x: float) -> str:
         zone = "def" if x < 35 else "mid" if x < 68 else "att"
@@ -139,11 +246,17 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
     # Bench plan from a separate RNG so the match itself is unchanged: 3 subs per team, warm-up 2.5 min before.
     plan = []
     brng = random.Random(seed * 7919 + 13)
-    for c in codes:
-        subs = TEAMS[c]["staff"]["subs"]
+    if scen and scen.get("subs"):
+        for minute, c, out_name, in_name in scen["subs"]:
+            slot = next(i for i, (n, _) in enumerate(teams[c]["players"]) if n == out_name)
+            idx = next(i for i, sb in enumerate(teams[c]["staff"]["subs"]) if sb[0] == in_name)
+            plan.append((minute * 60.0 - 150, "warmup", c, slot, idx))
+            plan.append((minute * 60.0, "substitution", c, slot, idx))
+    for c in ([] if scen and scen.get("subs") else codes):
+        subs = teams[c]["staff"]["subs"]
         free = list(range(len(subs)))
         for slot, minute in zip(brng.sample(range(1, 11), 3), sorted(brng.sample(range(58, 84), 3))):
-            pos = TEAMS[c]["players"][slot][1]
+            pos = teams[c]["players"][slot][1]
             idx = next((i for i in free if subs[i][1] == pos), next(i for i in free if subs[i][1] != "GK"))
             free.remove(idx)
             when = minute * 60.0 + brng.uniform(0, 50)
@@ -155,14 +268,18 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         events.append(Event(next(ids), round(t, 1), type_, team, player,
                             round(x, 1), round(y, 1), outcome, meta))
 
-    def track(t_, poss_, x_, y_, ph="open", phc=1.0, loose=False):
+    def slot_of(team: str, name: str) -> Optional[int]:
+        return next((i for i, (n, _) in enumerate(roster[team]) if n == name), None)
+
+    def track(t_, poss_, x_, y_, ph="open", phc=1.0, loose=False, taker=None):
         """One tracking frame. holder/conf/phase say who has the ball and what kind of play it is;
         conf is lower when the ball is contested, plus a deterministic *simulated* tracker
         occlusion so consumers must handle uncertain frames."""
         if not tracking:
             return
         bx, by = (x_, y_) if poss_ == codes[0] else (100 - x_, 100 - y_)
-        pos, info = _frame_positions(codes, t_, poss_, x_, y_)
+        pos, info = _frame_positions(codes, t_, poss_, x_, y_, teams,
+                                     slot_of(poss_, taker) if taker else None)
         occluded = (math.sin(t_ * 12.9898) * 43758.5453) % 1.0 < 0.18
         if loose:
             holder, conf = None, 0.0
@@ -180,19 +297,66 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
     emit(0, "kickoff", poss, pick(poss, 50), 50, 50)
     track(0.0, poss, x, y)
 
+    script = sorted(scen["script"], key=lambda d: d["t"]) if scen else []
+
+    def run_script(item):
+        """Scripted storyline beats (goals, VAR, penalty, cards). Random play never scores in these matches."""
+        nonlocal t, poss, x, y, pressured
+        kind, att, tt = item["do"], item["team"], item["t"]
+        if kind in ("goal", "disallowed"):
+            emit(tt - 3, "pass", att, item["assist"], 72, 52, "complete", receiver=item["scorer"],
+                 distance_m=24.0, difficulty=0.55, speed_kmh=55)
+            if kind == "goal":
+                score[att] += 1
+            emit(tt, "shot", att, item["scorer"], 88, 50, "goal" if kind == "goal" else "disallowed", xg=item["xg"],
+                 speed_kmh=item.get("speed", 90), distance_m=11.0, score=dict(score))
+            track(tt, att, 88, 50, taker=item["scorer"])
+            if kind == "goal":
+                poss, x, y = other[att], 50.0, 50.0
+                emit(tt + 40, "kickoff", poss, pick(poss, 50), 50, 50)
+                t = tt + 40
+                track(t, poss, x, y, "kickoff")
+            else:  # VAR rules it out: free kick to the defenders
+                emit(tt + 2, "var", att, item["scorer"], 88, 50, kind="goal_check")
+                emit(tt + 42, "var", att, item["scorer"], 88, 50, kind="no_goal", reason=item.get("reason", "offside"))
+                poss, x, y = other[att], 20.0, 50.0
+                emit(tt + 60, "restart", poss, "", x, y, kind="free_kick")
+                t = tt + 60
+                track(t, poss, x, y)
+        elif kind == "penalty":
+            emit(tt, "foul", other[att], item["fouler"], 15, 50, against=att, penalty=True)
+            emit(tt + 4, "var", att, item["taker"], 88, 50, kind="penalty_check")
+            emit(tt + 60, "var", att, item["taker"], 88, 50, kind="penalty_awarded")
+            emit(tt + 80, "restart", att, "", 88, 50, kind="penalty")
+            for k in range(3):
+                track(tt + 85 + k * 3, att, 88, 50, "penalty", 0.97, taker=item["taker"])
+            score[att] += 1
+            emit(tt + 95, "shot", att, item["taker"], 88, 50, "goal", xg=0.76, speed_kmh=96, distance_m=11.0,
+                 penalty=True, score=dict(score))
+            track(tt + 96, att, 88, 50, taker=item["taker"])
+            poss, x, y = other[att], 50.0, 50.0
+            emit(tt + 135, "kickoff", poss, pick(poss, 50), 50, 50)
+            t = tt + 135
+            track(t, poss, x, y, "kickoff")
+        elif kind == "card":
+            emit(tt, "card", att, item["player"], 40, 50, card="yellow")
+        pressured = False
+
     while True:
         t += rng.uniform(3, 8)
         if t >= duration:
             break
         while plan and plan[0][0] <= t:
             when, kind, c, slot, idx = plan.pop(0)
-            sub_name, sub_pos, number = TEAMS[c]["staff"]["subs"][idx]
+            sub_name, sub_pos, number = teams[c]["staff"]["subs"][idx]
             if kind == "warmup":
                 emit(when, "warmup", c, sub_name, 50, 50, sub_idx=idx, slot=slot, number=number)
             else:
                 out_name = roster[c][slot][0]
                 roster[c][slot] = (sub_name, sub_pos)
                 emit(when, "substitution", c, sub_name, 50, 50, sub_idx=idx, slot=slot, number=number, player_out=out_name)
+        while script and script[0]["t"] <= t:
+            run_script(script.pop(0))
         opp = other[poss]
         boost = {c: 0.45 if any(s <= t < e and tm == c for s, e, tm in phases) else 0.0
                  for c in codes}
@@ -201,12 +365,12 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         r = rng.random()
         ph, phc, loose = "open", 1.0, False
 
-        if x >= 72 and rng.random() < 0.09:
+        if x >= 72 and rng.random() < (scen.get("shot_rate", 0.09) if scen else 0.09):
             shooter = pick(poss, x)
             dist = math.hypot((100 - x) * 1.05, (y - 50) * 0.68)
-            xg = round(_clamp(0.65 * math.exp(-dist / 11.0) * (att / 1.0) ** 0.5, 0.02, 0.8), 2)
+            xg = round(_clamp(0.65 * math.exp(-dist / 11.0) * ((min(att, 1.1) if scen else att) / 1.0) ** 0.5, 0.02, 0.8), 2)
             u = rng.random()
-            outcome = ("goal" if u < xg else "saved" if u < xg + 0.28
+            outcome = ("goal" if (u < xg and not scen) else "saved" if u < xg + 0.28
                        else "blocked" if u < xg + 0.48 else "off_target")
             speed = round(rng.uniform(70, 115), 0)
             if outcome == "goal":
@@ -239,7 +403,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
             poss, x, y, pressured = opp, 100 - x, 100 - y, False
             emit(t, "possession_change", poss, tackler, x, y, cause=kind)
             loose = True  # the ball is up for grabs for a moment
-        elif r < p_lose + 0.12 * (0.4 + TEAMS[opp]["tactic"]["press"]):
+        elif r < p_lose + 0.12 * (0.4 + teams[opp]["tactic"]["press"]):
             emit(t, "pressure", opp, pick(opp, 100 - x), 100 - x, 100 - y,
                  intensity=round(rng.uniform(0.3, 1.0), 2))
             pressured = True
@@ -252,7 +416,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
             x = _clamp(x + dx, 2, 98)
         else:
             passer = pick(poss, x)
-            dx = rng.gauss(26, 8) if rng.random() < TEAMS[poss]["tactic"]["long"] else rng.gauss(8, 9)
+            dx = rng.gauss(26, 8) if rng.random() < teams[poss]["tactic"]["long"] else rng.gauss(8, 9)
             nx, ny = _clamp(x + dx, 2, 98), _clamp(y + rng.gauss(0, 14), 4, 96)
             dist = math.hypot((nx - x) * 1.05, (ny - y) * 0.68)
             difficulty = _clamp(0.1 + dist / 60 + (0.25 if pressured else 0)
@@ -284,7 +448,7 @@ def generate_match(seed: int = 7, duration: float = 5400.0, tracking: bool = Tru
         if e.type == "pressure" and frng.random() < 0.22:
             emit(e.t, "foul", e.team, e.player, e.x, e.y, against=other[e.team])
             emit(e.t + 0.1, "restart", other[e.team], "", 100 - e.x, 100 - e.y, kind="free_kick")
-            if frng.random() < 0.13 and yellows[e.team] < 4:
+            if frng.random() < 0.13 and yellows[e.team] < 4 and not scen:
                 yellows[e.team] += 1
                 emit(e.t + 0.2, "card", e.team, e.player, e.x, e.y, card="yellow")
         elif e.type == "pass" and e.outcome == "incomplete" and e.x >= 62 and frng.random() < 0.09:

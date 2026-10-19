@@ -1,3 +1,4 @@
+import { fmtMinute } from "@/lib/format"
 import { useEffect, useRef, useState } from "react"
 import { TEAM_COLORS } from "@/lib/theme"
 
@@ -19,11 +20,12 @@ export function MomentumChart({ series, goals, cards = [], codes, names, score, 
     ro.observe(el); setW(Math.max(280, Math.round(el.clientWidth)))
     return () => ro.disconnect()
   }, [])
-  const barW = (W - PAD_L - PAD_R - GAP) / 90
+  const maxMin = Math.max(90, minute)
+  const barW = (W - PAD_L - PAD_R - GAP) / maxMin
   const xOf = (m: number) => PAD_L + (m - 1) * barW + (m > 45 ? GAP : 0)
   const byMin = new Map(series.map((p) => [p.minute, p.value]))
   const htX = PAD_L + 45 * barW + GAP / 2
-  const minutes = Array.from({ length: 90 }, (_, i) => i + 1)
+  const minutes = Array.from({ length: maxMin }, (_, i) => i + 1)
   return (
     <div className="space-y-2" ref={box}>
       <div className="flex items-center justify-center gap-3 text-sm font-semibold">
@@ -47,7 +49,7 @@ export function MomentumChart({ series, goals, cards = [], codes, names, score, 
             <g key={i}>
               <line x1={x} x2={x} y1={home ? y + 8 : y - 8} y2={tip} stroke="currentColor" strokeOpacity={0.5} strokeDasharray="2 2" />
               <text x={x} y={y + 5} textAnchor="middle" fontSize={15}>⚽</text>
-              <text x={x} y={home ? y + 22 : y - 12} textAnchor="middle" fontSize={9} className="fill-muted-foreground">{g.minute}'</text>
+              <text x={x} y={home ? y + 22 : y - 12} textAnchor="middle" fontSize={9} className="fill-muted-foreground">{fmtMinute(g.minute)}'</text>
             </g>
           )
         })}
@@ -59,7 +61,7 @@ export function MomentumChart({ series, goals, cards = [], codes, names, score, 
         <text x={htX} y={H - 14} textAnchor="middle" fontSize={11} fontWeight={700} className="fill-foreground">HT</text>
         <text x={W - PAD_R} y={AXIS + 14} textAnchor="end" fontSize={11} fontWeight={700} className="fill-foreground">{minute >= 90 ? "FT" : ""}</text>
         <text x={PAD_L + (45 * barW) / 2} y={H - 4} textAnchor="middle" fontSize={11} className="fill-muted-foreground">1st half</text>
-        <text x={htX + GAP / 2 + (45 * barW) / 2} y={H - 4} textAnchor="middle" fontSize={11} className="fill-muted-foreground">2nd half</text>
+        <text x={htX + GAP / 2 + ((maxMin - 45) * barW) / 2} y={H - 4} textAnchor="middle" fontSize={11} className="fill-muted-foreground">2nd half</text>
       </svg>
       <p className="text-muted-foreground text-center text-xs">Each bar is one minute: which side had more of the pressure (shots, entries into the final third, high tackles). Higher bar means a bigger edge.</p>
     </div>
