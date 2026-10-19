@@ -61,7 +61,7 @@ export default function App() {
   return (
     <SidebarProvider>
       <AppSidebar matches={matches} matchId={matchId} onSelect={setMatchId} theme={theme.mode} onTheme={theme.setMode} />
-      <SidebarInset>
+      <SidebarInset className="bg-transparent">
         <Match key={matchId} cfg={cfg} matchId={matchId} theme={theme} />
       </SidebarInset>
     </SidebarProvider>
@@ -134,13 +134,13 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
 
   return (
     <div style={{ ["--pa" as string]: view3d ? 1.6 : 1.3548 }} className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[min(calc(100%_-_440px),calc((100dvh_-_178px)_*_var(--pa)))_minmax(0,1fr)] lg:gap-6 lg:px-5">
-      <div ref={headerRef} className="bg-background sticky top-0 z-30 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
+      <div ref={headerRef} className="bg-background/85 sticky top-0 z-30 min-w-0 border-b backdrop-blur-md px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon-lg" aria-label="Matches menu" onClick={toggleSidebar}><PanelLeft /></Button>
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold"><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[0] }} /><span className="truncate">{narrow ? codes[0] : cfg.teams[codes[0]].name}</span></div>
-            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
+            <div className="px-3 text-center"><div className="text-2xl leading-none font-extrabold tabular-nums">{stats?.teams[codes[0]].goals ?? 0}-{stats?.teams[codes[1]].goals ?? 0}</div><div className="flex items-center justify-center gap-1 text-[11px] font-bold text-(--minute)">{fmtMinute(stats?.minute ?? 0)}'<Activity className="text-muted-foreground size-3" /></div></div>
             <div className="flex min-w-0 items-center justify-end gap-2 text-sm font-semibold"><span className="truncate">{narrow ? codes[1] : cfg.teams[codes[1]].name}</span><span className="size-2.5 shrink-0 rounded-full" style={{ background: TEAM_COLORS[1] }} /></div>
           </CardContent>
             </Card>
@@ -165,9 +165,9 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>
             <b className="block text-sm whitespace-nowrap">{toast.title}</b>{toast.body && <span className="text-muted-foreground hidden text-xs sm:block">{toast.body.slice(0, 90)}</span>}</div>}
           {benchSel && !sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
-            <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-amber-600 dark:text-amber-400">{benchSel.role}</div></div>}
+            <b>{benchSel.name}</b> · {cfg.teams[codes[benchSel.team]].name}<div className="text-xs font-bold text-(--minute)">{benchSel.role}</div></div>}
           {sel && <div className="bg-background/90 absolute inset-x-2 bottom-10 rounded-xl border px-3 py-2 text-sm backdrop-blur">
-            <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-amber-600 dark:text-amber-400">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
+            <b>{sel.name}</b> · {sel.team}<div className="text-xs">{sel.role ? <><span className="font-bold text-(--minute)">{sel.role.role}</span> · averages {sel.role.x_in}% up the pitch in possession</> : "Role appears once the AI has read the shape."}</div></div>}
         </div>
         <div className="hidden lg:block">{controls}</div>
       </div>
@@ -180,7 +180,7 @@ function Match({ cfg, matchId, theme }: { cfg: Config; matchId: string; theme: R
           <div className="min-h-0 overflow-hidden"><div className="pb-3">{controls}</div></div>
         </div>
         <Tabs defaultValue="moments">
-          <div className="bg-background sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
+          <div className="bg-background/85 backdrop-blur-md sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
             <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger><TabsTrigger value="lineups" onClick={() => setPitchHidden(true)}>Line-ups</TabsTrigger></TabsList>
           </div>
           <TabsContent value="moments" className="space-y-2">

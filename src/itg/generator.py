@@ -164,6 +164,85 @@ MATCHES["riverside"] = MatchSpec(
         ],
     })
 
+
+_REDCREST_TEAMS: Dict[str, Dict] = {
+    "RED": {
+        "name": "Redcrest United",
+        "tactic": {"line": 4.0, "width": 1.0, "press": 0.6, "long": 0.12},  # wing-backs, possession with width
+        "staff": {
+            "coach": "Ansel Whitcombe", "assistants": ["Ruta Kalnins", "Desmond Pryor"],
+            "subs": [("Tobias Lund", "GK", 12), ("Idan Barak", "DF", 13), ("Corin Ashdown", "DF", 14),
+                     ("Mateo Ibanez", "MF", 15), ("Kwesi Tetteh", "MF", 16), ("Rune Halvorsen", "MF", 17),
+                     ("Zane Okafor", "FW", 18), ("Felipe Marsh", "FW", 19), ("Hollis Crane", "FW", 20)],
+        },
+        "players": [
+            ("Hugo Mertens", "GK"), ("Callan Brooks", "DF"), ("Anselm Dreyer", "DF"), ("Rafe Holloway", "DF"),
+            ("Mateus Duarte", "MF"), ("Kelvin Osei", "MF"), ("Joaquin Vidal", "MF"), ("Pascal Roux", "MF"),
+            ("Teodor Falk", "MF"), ("Rhys Penmark", "MF"), ("Emil Sandoval", "FW"),
+        ],
+        "slots": [  # 3-4-2-1
+            ((5, 50), (14, 50)),
+            ((22, 70), (30, 70)), ((20, 50), (28, 50)), ((22, 30), (30, 30)),
+            ((42, 92), (64, 92)), ((42, 8), (64, 8)), ((38, 58), (48, 58)), ((38, 42), (48, 42)),
+            ((60, 66), (74, 66)), ((60, 34), (74, 34)),
+            ((78, 50), (88, 50)),
+        ],
+    },
+    "KES": {
+        "name": "Kestrel Town",
+        "tactic": {"line": -6.0, "width": 1.0, "press": 0.35, "long": 0.22},  # compact 4-4-2, quick breaks
+        "staff": {
+            "coach": "Gavin Harrowgate", "assistants": ["Pia Santoro", "Neil Tranter"],
+            "subs": [("Cass Dunmore", "GK", 12), ("Elliott Rae", "DF", 13), ("Marek Zielinski", "DF", 14),
+                     ("Dev Anand", "MF", 15), ("Louis Perrault", "MF", 16), ("Gabe Sinclair", "MF", 17),
+                     ("Wes Calloway", "FW", 18), ("Ike Nwosu", "FW", 19), ("Bram Voorhees", "FW", 20)],
+        },
+        "players": [
+            ("Ivor Teasdale", "GK"), ("Cormac Leighton", "DF"), ("Lucan Marsh", "DF"), ("Dorian Ashcroft", "DF"),
+            ("Evan Hartley", "DF"), ("Nasir Bello", "MF"), ("Tomasz Wrobel", "MF"), ("Jarek Lindgren", "MF"),
+            ("Pablo Ibarra", "MF"), ("Corbin Vale", "FW"), ("Emerson Lyle", "FW"),
+        ],
+        "slots": [  # 4-4-2
+            ((5, 50), (12, 50)),
+            ((28, 86), (44, 84)), ((20, 62), (26, 62)), ((20, 38), (26, 38)), ((28, 14), (44, 16)),
+            ((42, 82), (54, 80)), ((38, 60), (46, 58)), ((38, 40), (46, 42)), ((42, 18), (54, 20)),
+            ((62, 58), (70, 58)), ((60, 42), (68, 42)),
+        ],
+    },
+}
+
+# Inspired by a second real-world storyline the user supplied (an early shock, an equaliser, an own goal,
+# a penalty and a late consolation) with invented clubs, players and venue, and shifted minutes.
+MATCHES["redcrest"] = MatchSpec(
+    "redcrest", "Redcrest Rain Night", "Redcrest Park · 90+9", "An early shock, a fightback and a goal flurry",
+    _REDCREST_TEAMS, duration=99 * _M,
+    scenario={
+        "strength": {"RED": 1.22, "KES": 0.92},
+        "shot_rate": 0.05,
+        "script": [
+            {"t": 28 * _M + 40, "do": "goal", "team": "KES", "scorer": "Evan Hartley", "assist": "Nasir Bello", "xg": 0.18},
+            {"t": 33 * _M, "do": "card", "team": "KES", "player": "Tomasz Wrobel"},
+            {"t": 37 * _M + 10, "do": "card", "team": "KES", "player": "Nasir Bello"},
+            {"t": 41 * _M + 10, "do": "goal", "team": "RED", "scorer": "Pascal Roux", "assist": "Rhys Penmark", "xg": 0.27},
+            {"t": 55 * _M + 30, "do": "own_goal", "team": "RED", "culprit": "Lucan Marsh", "var": True},
+            {"t": 58 * _M + 50, "do": "penalty", "team": "RED", "taker": "Pascal Roux", "fouler": "Dorian Ashcroft", "var": False},
+            {"t": 60 * _M + 20, "do": "card", "team": "KES", "player": "Dorian Ashcroft"},
+            {"t": 67 * _M + 30, "do": "goal", "team": "RED", "scorer": "Pascal Roux", "xg": 0.62},
+            {"t": 81 * _M + 40, "do": "goal", "team": "RED", "scorer": "Teodor Falk", "assist": "Pascal Roux", "xg": 0.30},
+            {"t": 90 * _M + 50, "do": "goal", "team": "KES", "scorer": "Wes Calloway", "assist": "Pablo Ibarra", "xg": 0.58},
+            {"t": 93 * _M, "do": "card", "team": "RED", "player": "Teodor Falk"},
+        ],
+        "subs": [
+            (46, "KES", "Emerson Lyle", "Wes Calloway"), (62, "KES", "Jarek Lindgren", "Dev Anand"),
+            (73, "KES", "Tomasz Wrobel", "Louis Perrault"), (73, "KES", "Pablo Ibarra", "Gabe Sinclair"),
+            (83, "KES", "Nasir Bello", "Ike Nwosu"),
+            (73, "RED", "Callan Brooks", "Corin Ashdown"), (74, "RED", "Kelvin Osei", "Idan Barak"),
+            (80, "RED", "Rhys Penmark", "Zane Okafor"), (80, "RED", "Teodor Falk", "Mateo Ibanez"),
+            (80, "RED", "Joaquin Vidal", "Kwesi Tetteh"),
+        ],
+    })
+
+
 _ZONE_WEIGHTS = {
     "def": {"GK": 1.0, "DF": 6.0, "MF": 3.0, "FW": 0.5},
     "mid": {"GK": 0.1, "DF": 2.0, "MF": 6.0, "FW": 2.0},
@@ -303,9 +382,22 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         """Scripted storyline beats (goals, VAR, penalty, cards). Random play never scores in these matches."""
         nonlocal t, poss, x, y, pressured
         kind, att, tt = item["do"], item["team"], item["t"]
-        if kind in ("goal", "disallowed"):
-            emit(tt - 3, "pass", att, item["assist"], 72, 52, "complete", receiver=item["scorer"],
-                 distance_m=24.0, difficulty=0.55, speed_kmh=55)
+        if kind == "own_goal":  # att is the side that benefits; the culprit plays for the other side
+            score[att] += 1
+            emit(tt, "own_goal", att, item["culprit"], 90, 50, score=dict(score), against=other[att])
+            track(tt, att, 90, 50)
+            if item.get("var"):
+                emit(tt + 2, "var", att, item["culprit"], 90, 50, kind="goal_check")
+                emit(tt + 40, "var", att, item["culprit"], 90, 50, kind="goal_stands")
+                tt += 40
+            poss, x, y = other[att], 50.0, 50.0
+            emit(tt + 40, "kickoff", poss, pick(poss, 50), 50, 50)
+            t = tt + 40
+            track(t, poss, x, y, "kickoff")
+        elif kind in ("goal", "disallowed"):
+            if item.get("assist"):
+                emit(tt - 3, "pass", att, item["assist"], 72, 52, "complete", receiver=item["scorer"],
+                     distance_m=24.0, difficulty=0.55, speed_kmh=55)
             if kind == "goal":
                 score[att] += 1
             emit(tt, "shot", att, item["scorer"], 88, 50, "goal" if kind == "goal" else "disallowed", xg=item["xg"],
@@ -325,8 +417,9 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                 track(t, poss, x, y)
         elif kind == "penalty":
             emit(tt, "foul", other[att], item["fouler"], 15, 50, against=att, penalty=True)
-            emit(tt + 4, "var", att, item["taker"], 88, 50, kind="penalty_check")
-            emit(tt + 60, "var", att, item["taker"], 88, 50, kind="penalty_awarded")
+            if item.get("var", True):
+                emit(tt + 4, "var", att, item["taker"], 88, 50, kind="penalty_check")
+                emit(tt + 60, "var", att, item["taker"], 88, 50, kind="penalty_awarded")
             emit(tt + 80, "restart", att, "", 88, 50, kind="penalty")
             for k in range(3):
                 track(tt + 85 + k * 3, att, 88, 50, "penalty", 0.97, taker=item["taker"])

@@ -50,7 +50,7 @@ export function RecapCard({ recap, codes }: { recap: Recap; codes: string[] }) {
                 <li key={i} className="grid grid-cols-[2.2rem_0.6rem_1fr_auto] items-center gap-2 text-sm">
                   <span className="font-bold text-amber-600 tabular-nums dark:text-amber-400">{fmtMinute(g.minute)}'</span>
                   <span className="size-2 rounded-full" style={{ background: TEAM_COLORS[g.team === a ? 1 : 0] }} />
-                  <span className="truncate">{g.player}</span>
+                  <span className="truncate">{g.player}{g.og ? " (own goal)" : ""}</span>
                   <span className="text-muted-foreground text-xs tabular-nums">{g.score_home}-{g.score_away}</span>
                 </li>
               ))}

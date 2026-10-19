@@ -17,7 +17,7 @@ export function MomentCard({ o, awayCode }: { o: Overlay; awayCode: string }) {
   const goal = o.kind === "goal"
   return (
     <li className="animate-in fade-in slide-in-from-top-2 relative grid grid-cols-[34px_28px_minmax(0,1fr)] gap-x-2.5 pb-5">
-      <span className="pt-1 text-right text-xs font-bold text-amber-600 dark:text-amber-400 tabular-nums">{fmtMinute(o.minute)}'</span>
+      <span className="pt-1 text-right text-xs font-bold text-(--minute) tabular-nums">{fmtMinute(o.minute)}'</span>
       <span className="bg-background relative z-[1] mt-0.5 grid size-7 place-items-center rounded-full border-2" style={{ borderColor: color, boxShadow: goal ? `0 0 14px ${color}88` : undefined }}>
         <Icon className="size-3.5" style={{ color }} />
       </span>

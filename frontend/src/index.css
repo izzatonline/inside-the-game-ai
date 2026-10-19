@@ -49,38 +49,40 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    /* Day mode: Premier League-inspired purple, neon green and cyan on soft lavender */
+    --background: #f3eefb;
+    --foreground: #2a0030;
+    --card: #ffffff;
+    --card-foreground: #2a0030;
+    --popover: #ffffff;
+    --popover-foreground: #2a0030;
+    --primary: #38003c;
+    --primary-foreground: #ffffff;
+    --secondary: #ebe3f6;
+    --secondary-foreground: #38003c;
+    --muted: #ebe3f6;
+    --muted-foreground: #66527a;
+    --accent: #d6fbe8;
+    --accent-foreground: #38003c;
+    --destructive: #e90052;
+    --border: #ddd0ec;
+    --input: #ddd0ec;
+    --ring: #7b3f98;
+    --chart-1: #38003c;
+    --chart-2: #00b86b;
+    --chart-3: #04c2cc;
+    --chart-4: #e90052;
+    --chart-5: #7b3f98;
+    --radius: 0.75rem;
+    --sidebar: #38003c;
+    --sidebar-foreground: #f4eaff;
+    --sidebar-primary: #00ff85;
+    --sidebar-primary-foreground: #38003c;
+    --sidebar-accent: #4f1a56;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #5a2a60;
+    --sidebar-ring: #00ff85;
+    --minute: #e90052;
 }
 
 .dark {
@@ -136,5 +138,18 @@
 }
 
 /* team colours for text: darker on light backgrounds for contrast */
-:root { --team-0: #0369a1; --team-1: #be123c; }
-.dark { --team-0: #38bdf8; --team-1: #fb7185; }
+:root { --team-0: #0e7490; --team-1: #be123c; }
+.dark { --team-0: #38bdf8; --team-1: #fb7185; --minute: #fbbf24; }
+
+/* Day mode atmosphere: soft neon glows on lavender, tinted card shadows */
+:root:not(.dark) body {
+  background-image:
+    radial-gradient(900px 480px at -8% -10%, rgba(0, 255, 133, 0.22), transparent 60%),
+    radial-gradient(800px 460px at 108% -6%, rgba(4, 245, 255, 0.2), transparent 55%),
+    radial-gradient(700px 400px at 50% 112%, rgba(233, 0, 82, 0.07), transparent 60%),
+    linear-gradient(180deg, #f7f2fe 0%, #ece4f8 100%);
+  background-attachment: fixed;
+}
+:root:not(.dark) [data-slot="card"] {
+  box-shadow: 0 1px 2px rgba(56, 0, 60, 0.06), 0 10px 28px -14px rgba(56, 0, 60, 0.28);
+}

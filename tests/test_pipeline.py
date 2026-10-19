@@ -239,3 +239,23 @@ def test_riverside_story_in_the_pipeline_and_dominance():
     assert snap["MER"]["possession_pct"] >= 62  # the dominant side keeps the ball
     r = pipe.recap(Profile())
     assert r["headline"].startswith("Full time: Meridian FC 3-2 Tidewater Town")
+
+
+def test_redcrest_storyline_own_goal_var_and_penalty():
+    from itg.generator import MATCHES
+
+    spec = MATCHES["redcrest"]
+    names = {c: v["name"] for c, v in spec.teams.items()}
+    rosters = {c: [n for n, _ in v["players"]] for c, v in spec.teams.items()}
+    ev = generate_match(7, match="redcrest")
+    assert ev[-1].meta["score"] == {"RED": 5, "KES": 2}
+    pipe = MatchPipeline(names, OfflineLLM(), rosters=rosters)
+    out = [o for e in ev for o in pipe.process(e, Profile(mode="analyst"))]
+    goals = [o for o in out if o.kind == "goal"]
+    assert len(goals) == 7
+    assert any("OWN GOAL" in o.headline for o in goals) and any("penalty spot" in o.body for o in goals)
+    assert [o.headline for o in out if o.kind == "var"] == ["VAR check: possible goal", "VAR: goal stands"]
+    r = pipe.recap(Profile())
+    assert r["headline"].startswith("Full time: Redcrest United 5-2 Kestrel Town")
+    assert any(g.get("og") for g in r["goals"])
+    assert 52 <= r["stats"]["RED"]["possession_pct"] <= 75

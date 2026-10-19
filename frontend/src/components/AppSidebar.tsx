@@ -15,13 +15,13 @@ const THEME_LABEL: Record<ThemeMode, string> = { system: "Match my device", ligh
 export function AppSidebar({ matches, matchId, onSelect, theme, onTheme }: Props) {
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : SunMoon
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="offcanvas">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-1 py-1.5">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-sky-400 to-rose-500 text-base">⚽</span>
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#00ff85] to-[#04f5ff] text-base">⚽</span>
           <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-extrabold tracking-tight">Inside the Game</span>
-            <span className="text-muted-foreground text-[11px]">Synthetic match intelligence</span>
+            <span className="text-sidebar-foreground/70 text-[11px]">Synthetic match intelligence</span>
           </div>
         </div>
       </SidebarHeader>
@@ -39,17 +39,12 @@ export function AppSidebar({ matches, matchId, onSelect, theme, onTheme }: Props
                     </span>
                     <span className="grid min-w-0 flex-1 text-left leading-snug">
                       <span className="truncate text-sm font-semibold">{m.title}</span>
-                      <span className="text-muted-foreground truncate text-xs">{m.teams[0].name} v {m.teams[1].name}</span>
-                      <span className="text-muted-foreground/80 mt-0.5 line-clamp-2 text-[11px] whitespace-normal">{m.blurb}</span>
+                      <span className="text-sidebar-foreground/70 truncate text-xs">{m.teams[0].name} v {m.teams[1].name}</span>
+                      <span className="text-sidebar-foreground/55 mt-0.5 line-clamp-2 text-[11px] whitespace-normal">{m.blurb}</span>
                     </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton size="sm" disabled className="text-muted-foreground/70 italic" tooltip="A third simulation is on the way">
-                  <span className="grid size-4 place-items-center text-xs">＋</span><span>More simulations soon</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -62,7 +57,7 @@ export function AppSidebar({ matches, matchId, onSelect, theme, onTheme }: Props
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <p className="text-muted-foreground px-2 pb-1 text-[10px] leading-snug group-data-[collapsible=icon]:hidden">All clubs, players and matches are invented. No real match data is used.</p>
+        <p className="text-sidebar-foreground/70 px-2 pb-1 text-[10px] leading-snug group-data-[collapsible=icon]:hidden">All clubs, players and matches are invented. No real match data is used.</p>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

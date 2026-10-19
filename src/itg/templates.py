@@ -58,6 +58,12 @@ T = {
         "var_penalty_awarded": ("VAR: penalty awarded",
                                 "{minute}' - After a VAR check, {team_name} are awarded a penalty.",
                                 "A penalty is the highest-value chance in football: the review changes the match."),
+        "goal_own": ("OWN GOAL! {player}",
+                     "{minute}' - {player} turns the ball into his own net, a gift for {team_name}: {scoreline}.",
+                     "{team_name} had {pressure_pct}% of the pressure in the last 5 minutes - sustained pressure forced the error."),
+        "var_goal_stands": ("VAR: goal stands",
+                            "{minute}' - After a VAR check, {team_name}'s goal stands.",
+                            "The review confirms it: the score is now {score_home}-{score_away}."),
     },
     "es": {
         "goal": ("¡GOL! {player}",
@@ -114,6 +120,12 @@ T = {
         "var_penalty_awarded": ("VAR: penalti concedido",
                                 "{minute}' - Tras la revisión del VAR, {team_name} recibe un penalti.",
                                 "Un penalti es la ocasión de mayor valor del fútbol: la revisión cambia el partido."),
+        "goal_own": ("¡GOL EN PROPIA! {player}",
+                     "{minute}' - {player} desvía el balón a su propia red, un regalo para {team_name}: {scoreline}.",
+                     "{team_name} tuvo el {pressure_pct}% de la presión en los últimos 5 minutos: la presión sostenida provocó el error."),
+        "var_goal_stands": ("VAR: el gol se mantiene",
+                            "{minute}' - Tras la revisión del VAR, el gol de {team_name} se mantiene.",
+                            "La revisión lo confirma: el marcador es {score_home}-{score_away}."),
     },
     "ms": {
         "goal": ("GOL! {player}",
@@ -170,6 +182,12 @@ T = {
         "var_penalty_awarded": ("VAR: penalti diberikan",
                                 "Minit {minute} - Selepas semakan VAR, {team_name} diberikan penalti.",
                                 "Penalti ialah peluang paling bernilai dalam bola sepak: semakan ini mengubah perlawanan."),
+        "goal_own": ("GOL BUNUH DIRI! {player}",
+                     "Minit {minute} - {player} menyudu bola ke gawang sendiri, hadiah untuk {team_name}: {scoreline}.",
+                     "{team_name} menguasai {pressure_pct}% tekanan dalam 5 minit lepas - tekanan berterusan memaksa kesilapan itu."),
+        "var_goal_stands": ("VAR: gol disahkan",
+                            "Minit {minute} - Selepas semakan VAR, gol {team_name} disahkan.",
+                            "Semakan mengesahkannya: jaringan kini {score_home}-{score_away}."),
     },
 }
 

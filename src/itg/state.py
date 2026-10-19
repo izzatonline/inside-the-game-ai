@@ -145,6 +145,17 @@ class MatchState:
                 self.card_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player, "card": "yellow"})
                 return [self._moment(ev, "card", 0.6, ev.player, ev.team, card="yellow")]
             return out
+        if ev.type == "own_goal":
+            ts0 = self.teams[ev.team]
+            ts0.goals += 1
+            home, away = self.codes
+            self.goal_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player, "og": True,
+                                  "score_home": self.teams[home].goals, "score_away": self.teams[away].goals})
+            return [self._moment(
+                ev, "goal", 1.0, ev.player, ev.team, own_goal=True, against_run=False,
+                score_home=self.teams[home].goals, score_away=self.teams[away].goals,
+                scoreline=f"{self.teams[home].name} {self.teams[home].goals}-{self.teams[away].goals} {self.teams[away].name}",
+                pressure_pct=int(round(self.pressure_share(ev.team) * 100)))]
         if ev.type == "var":
             home, away = self.codes
             return [self._moment(ev, "var", 0.9 if ev.meta["kind"] in ("no_goal", "penalty_awarded") else 0.7,

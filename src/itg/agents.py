@@ -75,6 +75,8 @@ class PersonalizerAgent:
 
 
 def _template_key(m: Moment) -> str:
+    if m.kind == "goal" and m.facts.get("own_goal"):
+        return "goal_own"
     if m.kind == "goal" and m.facts.get("penalty"):
         return "goal_penalty"
     if m.kind == "var":
