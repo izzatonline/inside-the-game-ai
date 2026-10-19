@@ -1,0 +1,175 @@
+from itg.agents import FactChecker, MatchPipeline
+from itg.generator import TEAMS, generate_match
+from itg.llm import OfflineLLM
+from itg.models import Profile
+
+NAMES = {c: v["name"] for c, v in TEAMS.items()}
+
+
+def test_generator_is_deterministic():
+    a, b = generate_match(7), generate_match(7)
+    assert [e.to_dict() for e in a] == [e.to_dict() for e in b]
+    assert a[-1].type == "fulltime"
+
+
+def test_scoreline_matches_goal_moments():
+    pipe = MatchPipeline(NAMES, OfflineLLM())
+    goals = 0
+    for e in generate_match(3):
+        goals += sum(1 for m in pipe.state.ingest(e) if m.kind == "goal")
+    assert goals == sum(pipe.state.snapshot()["teams"][c]["goals"] for c in NAMES)
+
+
+def test_personalisation_changes_output():
+    events = generate_match(3)
+    out = {}
+    for name, prof in {"casual": Profile(), "analyst": Profile(mode="analyst"),
+                       "es": Profile(lang="es")}.items():
+        pipe = MatchPipeline(NAMES, OfflineLLM())
+        out[name] = [o for e in events for o in pipe.process(e, prof)]
+    assert len(out["analyst"]) > len(out["casual"])
+    assert any(o.chips for o in out["analyst"]) and not any(o.chips for o in out["casual"])
+    assert any("GOL" in o.headline for o in out["es"])
+
+
+def test_player_focus_only_shows_that_player_or_goals():
+    pipe = MatchPipeline(NAMES, OfflineLLM())
+    prof = Profile(player="Jamal Whitfield")
+    for e in generate_match(3):
+        for o in pipe.process(e, prof):
+            assert o.kind == "goal" or "Jamal Whitfield" in (o.headline + o.body)
+
+
+def test_fact_checker_blocks_invented_numbers():
+    facts = {"xg": 0.31, "minute": 12}
+    assert FactChecker().run("12' a 31% chance", facts)
+    assert not FactChecker().run("12' a 64% chance", facts)
+
+
+def test_recap_offline():
+    pipe = MatchPipeline(NAMES, OfflineLLM())
+    for e in generate_match(7):
+        pipe.process(e, Profile())
+    r = pipe.recap(Profile())
+    assert r["headline"].startswith("Full time") and r["source"] == "template"
+
+
+def test_agent_framework_workflow_matches_plain_pipeline():
+    maf = __import__("pytest").importorskip("agent_framework")  # noqa: F841
+    from itg.maf import MafRunner
+
+    events = generate_match(3)
+    plain = MatchPipeline(NAMES, OfflineLLM())
+    wf = MatchPipeline(NAMES, OfflineLLM(), runner=MafRunner(OfflineLLM()))
+    prof = Profile(mode="analyst", lang="es")
+    a = [(o.headline, o.body, o.why) for e in events for o in plain.process(e, prof)]
+    b = [(o.headline, o.body, o.why) for e in events for o in wf.process(e, prof)]
+    assert a and a == b
+
+
+def test_broadcaster_fanout_and_late_join():
+    import asyncio
+
+    from itg.bus import Broadcaster, generator_source
+
+    async def run():
+        bc = Broadcaster(generator_source(3, speed=1e9))
+        _, q1 = bc.subscribe()
+        await bc.task
+        hist, q2 = bc.subscribe()  # late joiner after the match ended
+        got = []
+        while (ev := await q1.get()) is not None:
+            got.append(ev)
+        return got, hist
+
+    got, hist = asyncio.run(run())
+    assert len(got) == len(hist) == len(generate_match(3))
+
+
+def _analyze(seed):
+    from itg.tactics import TacticsAnalyzer
+
+    an = TacticsAnalyzer(list(TEAMS), NAMES, {c: [n for n, _ in v["players"]] for c, v in TEAMS.items()})
+    for e in generate_match(seed):
+        an.frame(e) if e.type == "tracking" else an.observe(e)
+    return an.profiles
+
+
+def test_tactics_infer_formation_from_positions_only():
+    for seed in (1, 4, 7):
+        p = _analyze(seed)
+        assert p["NOR"]["formation"] == "4-3-3" and p["HAR"]["formation"] == "4-2-3-1"
+
+
+def test_tactics_infer_style_and_roles():
+    p = _analyze(7)
+    assert p["NOR"]["line_height"] > p["HAR"]["line_height"] + 10  # high line vs low block
+    assert p["NOR"]["ppda"] < p["HAR"]["ppda"]  # presses harder
+    roles = {r["name"]: r["role"] for r in p["NOR"]["roles"]}
+    assert roles["Callum Draper"] == "Inverted full-back"
+    assert roles["Joao Barreto"] == "Overlapping full-back"
+    assert any(o["title"] for o in p["NOR"]["options"])
+
+
+def test_tactic_moments_are_narrated_and_grounded():
+    pipe = MatchPipeline(NAMES, OfflineLLM())
+    kinds = {o.kind: o for e in generate_match(7) for o in pipe.process(e, Profile(mode="analyst"))}
+    assert {"tactic_report", "role_reveal"} <= set(kinds)
+    assert "4-3-3" in kinds["tactic_report"].headline or "4-2-3-1" in kinds["tactic_report"].headline
+
+
+class _StubLLM:
+    name, available = "stub", True
+
+    def __init__(self, reply):
+        self.reply = reply
+
+    def complete(self, system, user, max_tokens=250):
+        return self.reply(user) if callable(self.reply) else self.reply
+
+
+def _pair():
+    p = _analyze(7)
+    for c in p:
+        p[c]["name"] = NAMES[c]
+        p[c]["options"] = [{"title": "Play in behind", "detail": f"Line {p[c]['line_height']}."}]
+    return p["NOR"], p["HAR"]
+
+
+def test_tactical_analyst_accepts_grounded_and_rejects_invented_numbers():
+    import json
+
+    from itg.agents import TacticalAnalystAgent
+
+    nor, har = _pair()
+    good = json.dumps({"summary": f"Los locales defienden en línea {nor['line_height']}.",
+                       "options": [{"title": "Juego en largo", "detail": f"La línea rival está en {har['line_height']}."}]})
+    s, opts, src = TacticalAnalystAgent(_StubLLM(good)).run(nor, har, "es", "analyst")
+    assert src == "llm" and opts[0]["title"] == "Juego en largo"
+
+    bad = json.dumps({"summary": "They press at 97% intensity.", "options": [{"title": "x", "detail": "y"}]})
+    s, opts, src = TacticalAnalystAgent(_StubLLM(bad)).run(nor, har, "es", "analyst")
+    assert src == "template" and "4-3-3" in s and opts == nor["options"]
+
+
+def test_tactics_workflow_localises_and_guards():
+    pytest = __import__("pytest")
+    pytest.importorskip("agent_framework")
+    from itg.maf import MafRunner
+
+    nor, har = _pair()
+    job = MafRunner(OfflineLLM()).run_tactics(nor, har, Profile(lang="ms"))
+    assert job.verified and "beraksi" in job.summary
+    liar = _StubLLM('{"summary": "A 142 m high line.", "options": []}')
+    job = MafRunner(liar).run_tactics(nor, har, Profile(lang="en"))
+    assert job.verified and job.source == "template"
+
+
+def test_localize_tactics_is_cached_across_viewers():
+    cache, calls = {}, []
+    llm = _StubLLM(lambda user: calls.append(1) or None)
+    nor, har = _pair()
+    for _ in range(2):
+        pipe = MatchPipeline(NAMES, llm, cache)
+        out = pipe.localize_tactics({"NOR": nor, "HAR": har}, Profile(lang="es"), 300.0)
+    assert len(calls) == 2 and out["NOR"]["summary"].startswith("Northbridge")
