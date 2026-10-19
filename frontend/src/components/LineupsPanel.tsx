@@ -1,5 +1,4 @@
 import { ArrowDown, ArrowUp } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { fmtMinute } from "@/lib/format"
 import { TEAM_COLORS } from "@/lib/theme"
@@ -63,31 +62,79 @@ export function LineupsPanel({ cfg, codes, subLog, cards, goals }: Props) {
           <span>Shirt number inside each circle</span>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {codes.map((c, t) => {
-          const st = cfg.teams[c].staff
-          return (
-            <Card key={c} size="sm">
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ background: TEAM_COLORS[t] }} /><b className="text-sm">{cfg.teams[c].name}</b><span className="text-muted-foreground ml-auto text-xs tabular-nums">{cfg.teams[c].formation}</span></div>
-                <p className="text-muted-foreground text-xs">Head coach <b className="text-foreground">{st.coach}</b> · {st.assistants.join(", ")}</p>
-                <ul className="space-y-1">
-                  {st.subs.map((sb) => {
-                    const on = subLog.find((s) => s.team === c && s.player_in === sb.name)
-                    return (
-                      <li key={sb.number} className="grid grid-cols-[1.6rem_1fr_auto] items-center gap-2 text-sm">
-                        <span className="text-muted-foreground text-xs tabular-nums">{sb.number}</span>
-                        <span className={on ? "font-semibold" : "text-muted-foreground"}>{sb.name} <span className="text-muted-foreground text-[11px]">{sb.pos}</span></span>
-                        {on ? <Badge variant="secondary" className="gap-1 text-[11px]"><ArrowUp className="size-3 text-emerald-500" />{fmtMinute(on.minute)}' <span className="text-muted-foreground">for</span> {surname(on.player_out)}</Badge> : <span className="text-muted-foreground text-[11px]">unused</span>}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <Section title="Substitutions" empty={!subLog.length && "No changes yet"}>
+        <ul className="divide-y">
+          {[...subLog].sort((a, b) => a.minute - b.minute).map((s, k) => {
+            const t = codes.indexOf(s.team)
+            return (
+              <li key={k} className="grid grid-cols-[3rem_1fr] items-center gap-2 py-2">
+                <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tabular-nums"><i className="h-6 w-1 rounded-full" style={{ background: TEAM_COLORS[t] }} />{fmtMinute(s.minute)}'</span>
+                <div className="min-w-0 text-sm leading-tight">
+                  <p className="flex items-center gap-1.5 truncate font-semibold"><ArrowUp className="size-3.5 shrink-0 text-emerald-500" /><span className="truncate">{short(s.player_in)}</span><span className="text-muted-foreground text-xs font-normal tabular-nums">#{s.number}</span></p>
+                  <p className="text-muted-foreground flex items-center gap-1.5 truncate"><ArrowDown className="size-3.5 shrink-0 text-rose-500" /><span className="truncate">{short(s.player_out)}</span></p>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </Section>
+      <Section title="Substitute players">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+          {codes.map((c, t) => (
+            <div key={c} className="min-w-0">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-bold"><i className="size-2 rounded-full" style={{ background: TEAM_COLORS[t] }} />{c}</p>
+              <ul className="space-y-1.5">
+                {cfg.teams[c].staff.subs.map((sb) => {
+                  const on = subLog.find((s) => s.team === c && s.player_in === sb.name)
+                  return (
+                    <li key={sb.number} className={"flex items-center gap-2 " + (on ? "" : "opacity-60")}>
+                      <span className="relative grid size-7 shrink-0 place-items-center rounded-full border-2 text-[11px] font-bold tabular-nums" style={{ borderColor: on ? TEAM_COLORS[t] : undefined }}>
+                        {sb.number}
+                        {on && <i className="absolute -right-1 -bottom-1 grid size-3.5 place-items-center rounded-full bg-emerald-500"><ArrowUp className="size-2.5 text-white" /></i>}
+                      </span>
+                      <span className="min-w-0 leading-tight">
+                        <span className="block truncate text-[13px] font-semibold">{short(sb.name)}</span>
+                        <span className="text-muted-foreground block truncate text-[11px]">{on ? `${fmtMinute(on.minute)}' · for ${surname(on.player_out)}` : POS[sb.pos] ?? sb.pos}</span>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Section>
+      <Section title="Coaches">
+        <div className="grid grid-cols-2 gap-x-4">
+          {codes.map((c, t) => {
+            const st = cfg.teams[c].staff
+            return (
+              <div key={c} className="flex min-w-0 items-start gap-2">
+                <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ background: TEAM_COLORS[t] }}>C</span>
+                <span className="min-w-0 leading-tight">
+                  <span className="block truncate text-[13px] font-semibold">{short(st.coach)}</span>
+                  <span className="text-muted-foreground block text-[11px]">Head coach</span>
+                  <span className="text-muted-foreground mt-1 block text-[11px]">{st.assistants.map(short).join(" · ")}</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </Section>
     </div>
+  )
+}
+
+const POS: Record<string, string> = { GK: "Goalkeeper", DF: "Defender", MF: "Midfielder", FW: "Forward" }
+const short = (n: string) => { const p = n.split(" "); return p.length > 1 ? `${p[0][0]}. ${p.slice(1).join(" ")}` : n }
+
+function Section({ title, empty, children }: { title: string; empty?: string | false; children: React.ReactNode }) {
+  return (
+    <Card size="sm">
+      <CardContent className="space-y-2">
+        <h3 className="text-sm font-bold">{title}</h3>
+        {empty ? <p className="text-muted-foreground text-xs">{empty}</p> : children}
+      </CardContent>
+    </Card>
   )
 }
