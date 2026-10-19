@@ -108,7 +108,7 @@ function Match({ cfg }: { cfg: Config }) {
 
   return (
     <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(340px,1fr)] lg:gap-4 lg:px-4">
-      <div ref={headerRef} className="bg-background sticky top-0 z-10 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
+      <div ref={headerRef} className="bg-background sticky top-0 z-30 min-w-0 border-b px-3 pt-[calc(8px+env(safe-area-inset-top))] pb-1.5 lg:self-start lg:px-0 lg:pt-4">
         <div className="flex items-center gap-2">
           <Card size="sm" className="hover:bg-muted/40 flex-1 cursor-pointer transition-colors" role="button" tabIndex={0} aria-label="Show match momentum" onClick={() => setMomentumOpen(true)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setMomentumOpen(true) }}>
               <CardContent className="grid grid-cols-[1fr_auto_1fr] items-center">
@@ -143,7 +143,12 @@ function Match({ cfg }: { cfg: Config }) {
       </div>
 
       <div className="min-w-0 px-3 pt-1.5 pb-[calc(24px+env(safe-area-inset-bottom))] lg:px-0 lg:pt-4">
-        <div className="mb-3 lg:hidden">{controls}</div>
+        <div className="grid lg:hidden" style={{
+          gridTemplateRows: hidePitch ? "0fr" : "1fr", opacity: hidePitch ? 0 : 1, visibility: hidePitch ? "hidden" : "visible",
+          transition: hidePitch ? "grid-template-rows .5s ease, opacity .4s ease, visibility 0s linear .5s" : "grid-template-rows .5s ease, opacity .4s ease, visibility 0s",
+        }}>
+          <div className="min-h-0 overflow-hidden"><div className="pb-3">{controls}</div></div>
+        </div>
         <Tabs defaultValue="moments">
           <div className="bg-background sticky top-(--hdr) z-20 -mx-3 px-3 pt-1 pb-2 lg:top-0 lg:mx-0 lg:px-0">
             <TabsList className="w-full"><TabsTrigger value="moments" onClick={() => setPitchHidden(true)}>Moments</TabsTrigger><TabsTrigger value="tactics" onClick={() => setPitchHidden(true)}>Tactics</TabsTrigger><TabsTrigger value="stats" onClick={() => setPitchHidden(true)}>Stats</TabsTrigger></TabsList>
