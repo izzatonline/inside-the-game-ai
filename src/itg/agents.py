@@ -36,13 +36,18 @@ def _numbers(obj: Any) -> List[float]:
 class FactChecker:
     """Rejects generated text containing numbers that are not in the source facts."""
 
-    def run(self, text: str, facts: Dict[str, Any]) -> bool:
+    def audit(self, text: str, facts: Dict[str, Any]) -> Dict[str, Any]:
+        """Every number in the text, and whether it appears in the facts (exactly, or as a percentage of one)."""
         allowed = _numbers(facts)
+        found, missing = [], []
         for n in _NUM.findall(text):
             v = float(n)
-            if not any(abs(v - a) <= 0.051 or abs(v / 100 - a) <= 0.0051 for a in allowed):
-                return False
-        return True
+            ok = any(abs(v - a) <= 0.051 or abs(v / 100 - a) <= 0.0051 for a in allowed)
+            (found if ok else missing).append(n)
+        return {"numbers": found + missing, "matched": found, "unmatched": missing}
+
+    def run(self, text: str, facts: Dict[str, Any]) -> bool:
+        return not self.audit(text, facts)["unmatched"]
 
 
 class PersonalizerAgent:
@@ -177,7 +182,7 @@ class RecapAgent:
             "comeback": bool(goals) and snap[h]["goals"] != snap[a]["goals"] and trailed,
             "goals": [{"minute": g["minute"], "scorer": g["player"], "team": snap[g["team"]]["name"]} for g in goals],
         }
-        text = self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(p.lang, p.lang)), json.dumps(facts), 220)
+        text = self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(p.lang, p.lang)), json.dumps(facts), 220) if p.ai else None
         source = "llm"
         if not text or not FactChecker().run(text, facts):
             text, source = self._narrative(facts, p.lang), "template"
@@ -252,9 +257,12 @@ class MatchPipeline:
         for m in self.state.ingest(event):
             if not self.personalizer.relevant(m, profile):
                 continue
-            key = (m.id, profile.lang, profile.mode)
+            key = (m.id, profile.lang, profile.mode, profile.ai)
             if key not in self.cache:
-                if self.runner:
+                if not profile.ai:  # viewer switched AI off: grounded templates only
+                    h, b, w = _tmpl(profile.lang, _template_key(m))
+                    self.cache[key] = (_fmt(w, m.facts), _fmt(h, m.facts), _fmt(b, m.facts), "template")
+                elif self.runner:
                     job = self.runner.run(m, profile)
                     self.cache[key] = (job.why, job.headline, job.body, job.source)
                 else:
@@ -262,12 +270,19 @@ class MatchPipeline:
                     headline, body, s2 = self.narrator.run(m, profile)
                     self.cache[key] = (why, headline, body, "llm" if "llm" in (s1, s2) else "template")
             why, headline, body, source = self.cache[key]
+            audit = (FactChecker().audit(f"{headline} {body} {why}", m.facts) if source == "llm"
+                     else {"numbers": [], "matched": [], "unmatched": []})  # templates are fixed wording, nothing to audit
+            how = ("ai" if source == "llm" else "ai_off" if not profile.ai
+                   else "fallback" if getattr(self.llm, "available", False) else "rules")
             ov = Overlay(
                 moment_id=m.id, t=m.t, minute=m.minute, kind=m.kind, team=m.team,
                 importance=m.importance, headline=headline, body=body,
                 why=why if profile.mode == "analyst" or m.importance >= 0.9 else "",
                 chips=self.personalizer.chips(m, profile), lang=profile.lang, mode=profile.mode,
-                source=source, verified=True, duration_s=8.0 if m.importance >= 0.9 else 5.0, player=m.player)
+                source=source, verified=True, duration_s=8.0 if m.importance >= 0.9 else 5.0, player=m.player,
+                facts=m.facts, model=(getattr(self.llm, "deployment", "") or self.llm.name) if source == "llm" else "",
+                check={"how": how, "numbers": len(audit["numbers"]), "matched": len(audit["matched"]),
+                       "unmatched": audit["unmatched"], "agents": ["Explainer", "Narrator", "FactChecker"]})
             self.shown.append((m, ov))
             overlays.append(ov)
         return overlays
@@ -278,9 +293,9 @@ class MatchPipeline:
         out: Dict[str, Any] = {}
         for c, p in update.items():
             opp = next((v for k, v in update.items() if k != c), None)
-            key = ("tac", c, p["formation"], p["primary"], int(t // 300), profile.lang, profile.mode)
+            key = ("tac", c, p["formation"], p["primary"], int(t // 300), profile.lang, profile.mode, profile.ai)
             if key not in self.cache:
-                if opp is None:
+                if opp is None or not profile.ai:
                     self.cache[key] = self.tactician.fallback(p, profile.lang)
                 elif self.runner:
                     job = self.runner.run_tactics(p, opp, profile)

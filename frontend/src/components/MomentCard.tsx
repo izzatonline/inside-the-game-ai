@@ -1,5 +1,7 @@
+import { useState } from "react"
 import { fmtMinute } from "@/lib/format"
-import { ArrowLeftRight, Goal, LayoutGrid, Medal, Send, ShieldCheck, Target, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
+import { ProvenanceDialog } from "@/components/ProvenanceDialog"
+import { ArrowLeftRight, Goal, LayoutGrid, Medal, Send, Info, Target, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
 import { TEAM_COLORS } from "@/lib/theme"
 import type { Overlay } from "@/lib/types"
 
@@ -15,6 +17,7 @@ export function MomentCard({ o, awayCode }: { o: Overlay; awayCode: string }) {
   const color = TEAM_COLORS[o.team === awayCode ? 1 : 0]
   const { label, Icon } = KIND[o.kind] ?? { label: o.kind, Icon: Target }
   const goal = o.kind === "goal"
+  const [how, setHow] = useState(false)
   return (
     <li className="animate-in fade-in slide-in-from-top-2 relative grid grid-cols-[34px_28px_minmax(0,1fr)] gap-x-2.5 pb-5">
       <span className="pt-1 text-right text-xs font-bold text-(--minute) tabular-nums">{fmtMinute(o.minute)}'</span>
@@ -31,7 +34,10 @@ export function MomentCard({ o, awayCode }: { o: Overlay; awayCode: string }) {
         {(
           <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
             {o.chips.map((c) => <span key={c.label}>{c.label} <b className="text-foreground tabular-nums">{c.value}</b></span>)}
-            <span className="ml-auto flex items-center gap-1 opacity-70"><ShieldCheck className="size-3" />{o.source === "llm" ? "AI" : "rules"} · checked</span>
+            <button type="button" onClick={() => setHow(true)} aria-label="How this was made" className="hover:bg-muted ml-auto flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors">
+              <Info className="size-3" />{o.source === "llm" ? "AI · fact-checked" : "Rules wording"}
+            </button>
+            <ProvenanceDialog o={o} open={how} onOpenChange={setHow} />
           </div>
         )}
       </div>

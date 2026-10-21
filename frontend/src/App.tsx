@@ -30,7 +30,7 @@ import type { BenchPick, Config, MatchInfo, Selected, Settings } from "@/lib/typ
 const params = new URLSearchParams(location.search)
 const initial: Settings = {
   match: params.get("match") ?? "", mode: params.get("mode") ?? "casual", lang: params.get("lang") ?? "en", team: params.get("team") ?? "", player: "",
-  metric: params.get("metric") ?? "", src: params.get("src") ?? "stream", speed: params.get("speed") ?? "60", seed: params.get("seed") ?? "7",
+  metric: params.get("metric") ?? "", src: params.get("src") ?? "stream", speed: params.get("speed") ?? "60", seed: params.get("seed") ?? "7", ai: params.get("ai") ?? "1",
 }
 
 /** True below the lg breakpoint (phones and small tablets), where the pitch can be folded away. */

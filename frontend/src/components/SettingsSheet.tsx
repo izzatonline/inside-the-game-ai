@@ -88,6 +88,9 @@ export function SettingsSheet({ theme, onTheme, open, onOpenChange, cfg, value, 
           </Section>
 
           <Section title="How you watch">
+            <Row label="AI narration" help={cfg.llm === "offline" ? "No AI model is connected, so wording always comes from templates." : value.ai === "0" ? "Fixed template wording only. Faster and free." : `Wording is written by an AI model and fact-checked. Tap the label on any card to see how.`}>
+              <Segment label="AI narration" value={value.ai} onValue={set("ai")} items={[{ value: "1", label: "On", icon: <Sparkles className="size-3.5" /> }, { value: "0", label: "Off" }]} />
+            </Row>
             <Row label="Style" help={value.mode === "analyst" ? "Adds the numbers, the 'why' behind each moment and tactical detail." : "Plain-language highlights without the number crunching."}>
               <Segment label="Style" value={value.mode} onValue={set("mode")} items={[{ value: "casual", label: "Casual fan" }, { value: "analyst", label: "Analyst" }]} />
             </Row>

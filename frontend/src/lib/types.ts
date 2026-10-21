@@ -3,6 +3,8 @@ export type Overlay = {
   moment_id: string; t: number; minute: number; kind: string; team: string; importance: number
   headline: string; body: string; why: string; chips: Chip[]; lang: string; mode: string
   source: string; verified: boolean; player?: string | null
+  facts?: Record<string, unknown>; model?: string
+  check?: { how: string; numbers: number; matched: number; unmatched: string[]; agents: string[] }
 }
 export type Role = { idx: number; name: string; role: string; short: string; x_in: number; y_in: number }
 export type TeamTactics = {
@@ -39,7 +41,7 @@ export type Config = {
 }
 export type MatchInfo = { id: string; title: string; subtitle: string; blurb: string; duration_min: number; scripted: boolean; teams: { code: string; name: string }[] }
 export type Settings = {
-  match: string; mode: string; lang: string; team: string; player: string; metric: string; src: string; speed: string; seed: string
+  match: string; mode: string; lang: string; team: string; player: string; metric: string; src: string; speed: string; seed: string; ai: string
 }
 export type Frames = {
   target: number[][] | null; ball: number[]; trail: number[][]; n: number; reset: boolean

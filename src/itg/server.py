@@ -126,11 +126,11 @@ def match_events(seed: int = 7, match: str = DEFAULT_MATCH):
 @app.get("/api/stream")
 async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str = "casual",
                  team: Optional[str] = None, player: Optional[str] = None,
-                 metric: Optional[str] = None, match: str = DEFAULT_MATCH, start: float = 0.0):
+                 metric: Optional[str] = None, match: str = DEFAULT_MATCH, start: float = 0.0, ai: int = 1):
     """Replay a match. `start` (minutes) jumps in mid-match: earlier events are processed silently and sent as a
     quick catch-up burst (feed, stats, tactics, bench, last frame), then play continues live from there."""
     profile = Profile(mode=mode if mode in ("casual", "analyst") else "casual", lang=lang,
-                      team=team or None, player=player or None, metric=metric or None)
+                      team=team or None, player=player or None, metric=metric or None, ai=bool(ai))
     spec = _spec(match)
     events = generate_match(seed, match=spec.id)
     pipe = _pipeline(spec, seed)
@@ -170,10 +170,10 @@ async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str
 @app.get("/api/live")
 async def live(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str = "casual",
                team: Optional[str] = None, player: Optional[str] = None,
-               metric: Optional[str] = None, match: str = DEFAULT_MATCH):
+               metric: Optional[str] = None, match: str = DEFAULT_MATCH, ai: int = 1):
     """Event-driven path: viewers subscribe to the shared ingest bus (in-memory or Event Hubs)."""
     profile = Profile(mode=mode if mode in ("casual", "analyst") else "casual", lang=lang,
-                      team=team or None, player=player or None, metric=metric or None)
+                      team=team or None, player=player or None, metric=metric or None, ai=bool(ai))
     spec = _spec(match)
     key = (spec.id, seed)
     if key not in _live or _live[key].task.done() and not _live[key].history:

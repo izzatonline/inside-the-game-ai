@@ -63,6 +63,7 @@ class Profile:
     team: Optional[str] = None  # favourite club code
     player: Optional[str] = None  # player-focus mode
     metric: Optional[str] = None  # xg | speed | passing
+    ai: bool = True  # False: rules/templates only, no model calls for this viewer
 
 
 @dataclass
@@ -83,6 +84,9 @@ class Overlay:
     verified: bool
     duration_s: float
     player: Optional[str] = None
+    facts: Dict[str, Any] = field(default_factory=dict)  # the only data the wording may use
+    model: str = ""  # deployment that wrote the text ("" for rules)
+    check: Dict[str, Any] = field(default_factory=dict)  # fact-check audit + how the text was produced
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

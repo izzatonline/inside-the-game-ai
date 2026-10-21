@@ -35,7 +35,7 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
     frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null }
     setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null); setPaused(false)
     const player = s.player.split(":")[2] ?? ""
-    const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric })
+    const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric, ai: s.ai })
     const es = new EventSource(`/api/${s.src}?${q}`)
     esRef.current = es
     let toastId = 0
