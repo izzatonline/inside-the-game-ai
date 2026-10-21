@@ -4,3 +4,9 @@ __pycache__/
 *.egg-info/
 frontend/node_modules/
 PROGRESS.md
+
+# video prototype inputs/outputs (real footage must never be committed)
+videos/
+*.mp4
+*.pt
+*.tracking.json

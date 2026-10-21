@@ -18,6 +18,7 @@ agents = [
   # Microsoft Agent Framework (needs Python 3.10+); see README "Agent Framework wiring"
   "agent-framework",
 ]
+vision = ["opencv-python-headless", "ultralytics", "scikit-learn"]
 dev = ["pytest>=8", "httpx>=0.27"]
 
 [build-system]
