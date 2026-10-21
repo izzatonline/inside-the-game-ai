@@ -10,7 +10,7 @@ ball-speed and xG metadata. An interpreter folds them into live state (possessio
 detects moments: goals, big chances, momentum swings, control-vs-chaos spells, sprints, pass-quality and milestones.
 A team of specialised agents on **Microsoft Agent Framework** (Explainer -> Narrator -> FactChecker, plus Personalizer and Recap)
 explains *why* each moment matters and writes it for the viewer: casual or analyst mode, favourite club, player-focus mode,
-a single metric (xG / speed / passing), and language (English, Spanish, Malay offline; any language with a model).
+a single metric (xG / speed / passing), and language (English, Spanish and Malay built in; French, Arabic and Portuguese written by the model and fact-checked).
 A FactChecker rejects any generated number not present in the source facts, so the narrative stays grounded and the system
 degrades gracefully if a model fails. Overlays are timed, machine-readable JSON streamed over SSE, ready to render over a live feed.
 Narration runs on a gpt-5-mini model deployed in **Microsoft Foundry**, with the Agent Framework workflow orchestrating the agents;

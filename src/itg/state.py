@@ -115,7 +115,7 @@ class MatchState:
         self._n += 1
         base = {
             "minute": minute_label(ev.minute), "team": team, "team_name": self.teams[team].name,
-            "player": player,
+            "player": player, "window_min": int(WINDOW_S // 60),  # the rolling window "last N minutes" refers to
         }
         base.update(facts)
         return Moment(f"{kind}-{self._n}", kind, ev.t, ev.minute, team, player,
