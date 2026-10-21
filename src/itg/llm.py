@@ -29,7 +29,7 @@ class AzureLLM:
 
         endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
         self.deployment = os.environ["AZURE_OPENAI_DEPLOYMENT"]
-        version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
+        version = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-04-01-preview")
         key = os.environ.get("AZURE_OPENAI_API_KEY")
         if key:
             self.client = AzureOpenAI(azure_endpoint=endpoint, api_key=key, api_version=version)
@@ -42,11 +42,15 @@ class AzureLLM:
                                       api_version=version)
 
     def complete(self, system: str, user: str, max_tokens: int = 250) -> Optional[str]:
+        reasoning = self.deployment.lower().startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+        # reasoning models reject max_tokens/temperature and spend part of the budget "thinking"
+        extra = ({"max_completion_tokens": max_tokens + 400, "reasoning_effort": "minimal"} if reasoning
+                 else {"max_tokens": max_tokens, "temperature": 0.4})
         try:
             r = self.client.chat.completions.create(
                 model=self.deployment,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-                max_tokens=max_tokens, temperature=0.4, timeout=8)
+                timeout=20, **extra)
             return (r.choices[0].message.content or "").strip() or None
         except Exception as exc:  # noqa: BLE001 - degrade, never crash the stream
             log.warning("LLM call failed, using template fallback: %s", exc)
