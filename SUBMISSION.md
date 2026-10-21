@@ -13,13 +13,13 @@ explains *why* each moment matters and writes it for the viewer: casual or analy
 a single metric (xG / speed / passing), and language (English, Spanish, Malay offline; any language with a model).
 A FactChecker rejects any generated number not present in the source facts, so the narrative stays grounded and the system
 degrades gracefully if a model fails. Overlays are timed, machine-readable JSON streamed over SSE, ready to render over a live feed.
-Ingest is event-driven ([Azure Event Hubs] with Entra auth), the app ships as a container for [Azure Container Apps], and
-narration runs on [Microsoft Foundry] models.
+Narration runs on a gpt-5-mini model deployed in **Microsoft Foundry**, with the Agent Framework workflow orchestrating the agents;
+if the model is slow or unavailable the app falls back to grounded templates, so the demo never dies.
 Problem: broadcasters and streamers need trustworthy, localised, per-audience insight in real time, without a human writing each caption.
 
-Tech: Microsoft Agent Framework, Microsoft Foundry, Azure Event Hubs, Azure Container Apps (Bicep), GitHub Copilot, Python/FastAPI.
-**Only list a service once the demo actually uses it.** Today verified locally: Agent Framework workflow, offline templates, SSE, tests.
-Not yet verified live: Foundry calls, Event Hubs, Container Apps deployment.
+Tech: Microsoft Agent Framework, Microsoft Foundry (gpt-5-mini deployment), GitHub Copilot [only if actually used], Python/FastAPI, React.
+**Only list a service once the demo actually uses it.** Verified: Agent Framework workflow, live Foundry model calls (33 narrated moments in a full-match run), offline fallback, SSE, tests.
+Not used / not verified (do NOT list): Azure Event Hubs, Azure Container Apps (drafts exist in `infra/`).
 
 ## Demo video script (target 1:45, screen recording + voiceover, no music, no logos)
 
@@ -30,7 +30,7 @@ Not yet verified live: Foundry calls, Event Hubs, Container Apps deployment.
 | 0:30-0:55 | Switch to Analyst + Spanish; goal overlay shows xG, shot speed, pressure chips and the 'why' line | "Analyst mode in Spanish: xG, shot speed, and *why it matters*: this team had 92% of the pressure, so the goal rewards control." |
 | 0:55-1:10 | Player focus + metric = speed; sprint overlays; open JSON panel | "Player focus or a single metric. Every overlay is timed, machine-readable JSON for a broadcast renderer." |
 | 1:10-1:35 | Terminal: `python -m itg.demo` | "Agents hand off: explainer, narrator, fact-checker on Agent Framework. Here the model hallucinates numbers; the fact-checker rejects them and falls back to grounded text." |
-| 1:35-1:45 | Recap panel, then architecture diagram from README | "Full-time recap, event-driven ingest, containerised for Azure. Inside the Game." |
+| 1:35-1:45 | Recap panel, then architecture diagram from README | "Full-time recap, powered by Foundry with grounded fallbacks. Inside the Game." |
 
 Record at 1080p; trim to < 2:00 (judges stop at 2:00). Say "synthetic data" once. Don't show real club logos/kits.
 
@@ -38,7 +38,7 @@ Record at 1080p; trim to < 2:00 (judges stop at 2:00). Say "synthetic data" once
 
 - [ ] Repo public, README renders, no secrets (`.env` is gitignored)
 - [ ] Tests green in CI
-- [ ] Demo run once with Foundry (set `FOUNDRY_*`) so the pitch's claims are true; update the bracketed items
+- [x] Demo run once with Foundry (done 2026-10-21 via Azure OpenAI vars in `.env`); update any remaining bracketed items
 - [ ] Video < 2:00, public URL, plays logged-out
-- [ ] Project page: pitch, repo URL, video URL, category (Foundry / Multi-Agent / Azure Cloud Native / Enterprise)
+- [ ] Project page: pitch, repo URL, video URL, category (Foundry / Multi-Agent; skip Azure Cloud Native unless deployed)
 - [ ] English text throughout

@@ -73,7 +73,10 @@ export FOUNDRY_PROJECT_ENDPOINT="https://<project>.services.ai.azure.com"
 export FOUNDRY_MODEL="<deployment name>"
 ```
 
-Not yet verified against a live Foundry project (no credentials here). Azure OpenAI vars in `.env.example` remain a fallback.
+**Verified live (2026-10-21):** a `gpt-5-mini` deployment in a Microsoft Foundry project, called through the Azure OpenAI
+endpoint (`AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_KEY` in `.env`; see `.env.example`); the Agent
+Framework workflow orchestrates the agents. The `FOUNDRY_PROJECT_ENDPOINT` / `FoundryChatClient` path above is implemented
+but not yet exercised.
 
 ## Azure cloud-native
 
@@ -88,6 +91,6 @@ Not yet verified against a live Foundry project (no credentials here). Azure Ope
 
 ## Status (honest)
 
-Verified locally: generator, interpreter, personalisation, Agent Framework workflow (offline templates), SSE UI, tests.
-Not yet verified live: Foundry model calls, Event Hubs ingest, Container Apps deployment.
+Verified: generator, interpreter, personalisation, Agent Framework workflow, live Foundry model calls (gpt-5-mini), template fallback, SSE UI, tests.
+Not yet verified live: `FoundryChatClient` path, Event Hubs ingest, Container Apps deployment.
 All data is synthetic; team and player names are fictional. License: MIT.
