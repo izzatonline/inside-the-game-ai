@@ -20,6 +20,7 @@ Problem: broadcasters and streamers need trustworthy, localised, per-audience in
 Tech: Microsoft Agent Framework, Microsoft Foundry (gpt-5-mini deployment), GitHub Copilot [only if actually used], Python/FastAPI, React.
 **Only list a service once the demo actually uses it.** Verified: Agent Framework workflow, live Foundry model calls (33 narrated moments in a full-match run), offline fallback, SSE, tests.
 Not used / not verified (do NOT list): Azure Event Hubs, Azure Container Apps (drafts exist in `infra/`).
+Video auto-eventing: only a prototype (tracks players in synthetic footage; no pass/shot detection from video). If mentioned, say "early prototype", never as a finished feature.
 
 ## Demo video script (target 1:45, screen recording + voiceover, no music, no logos)
 

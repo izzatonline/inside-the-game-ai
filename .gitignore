@@ -10,3 +10,4 @@ videos/
 *.mp4
 *.pt
 *.tracking.json
+!docs/video-prototype.mp4

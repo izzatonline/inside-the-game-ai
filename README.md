@@ -89,8 +89,36 @@ but not yet exercised.
 * `python -m itg.demo`: multi-agent trace with handoffs, a simulated model outage and a hallucinating model; the
   FactChecker rejects ungrounded numbers and the pipeline degrades to grounded templates.
 
+## Video to tracking (prototype)
+
+The brief mentions "auto-eventing": running a model over a video feed. `src/itg/vision/` is an early, honest prototype of
+the first half of that: **fixed-camera footage -> player positions on our pitch**. It does not yet detect passes, shots or
+goals from video, and it is not wired into the app UI.
+
+* **Detect:** YOLOv8x at high resolution finds players (and sometimes the ball).
+* **Map to the pitch:** a homography from four or more known pitch points (`calib.json`) converts feet positions to the
+  same 0-100 pitch coordinates the synthetic generator uses.
+* **Track and team:** a ground-plane nearest-neighbour tracker keeps IDs (ByteTrack lost far-away players, whose boxes are
+  a few pixels wide); jersey colours are clustered into two teams.
+* **Score it:** `vision/synth.py` renders synthetic fixed-camera footage from generator data, so true positions are known.
+
+On a 12 s rendered clip (3200x1000, stick-figure players): about **67% of players found within 3 m, median position error
+0.47 m, 93% team-colour accuracy, ~16 of 22 players per frame, but ID fragmentation (45 IDs for 22 players)**. The
+detector is weak on the simple figures, and the ball is not tracked. Real footage is harder (panning cameras need per-frame
+calibration), and was not tested here for licensing reasons. Only synthetic footage is in this repo.
+
+Clip: [`docs/video-prototype.mp4`](docs/video-prototype.mp4) (top: detections on synthetic footage; bottom: tracked dots vs
+ground-truth rings).
+
+```bash
+uv pip install -e ".[vision]"
+python -m itg.vision.synth videos/synth.mp4 --seconds 12          # render footage + truth + calibration
+python -c "from itg.vision.pipeline import track_video as t; t('videos/synth.mp4','videos/synth.calib.json','videos/synth.tracking.json',model='yolov8x.pt',conf=0.05,imgsz=3200)"
+python -m itg.vision.score videos/synth.tracking.json videos/synth.truth.json
+```
+
 ## Status (honest)
 
 Verified: generator, interpreter, personalisation, Agent Framework workflow, live Foundry model calls (gpt-5-mini), template fallback, SSE UI, tests.
-Not yet verified live: `FoundryChatClient` path, Event Hubs ingest, Container Apps deployment.
+Prototype only: video-to-tracking (synthetic footage). Not yet verified live: `FoundryChatClient` path, Event Hubs ingest, Container Apps deployment.
 All data is synthetic; team and player names are fictional. License: MIT.
