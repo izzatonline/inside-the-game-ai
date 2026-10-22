@@ -46,8 +46,10 @@ export function MomentumChart({ series, goals, cards = [], codes, names, score, 
       </div>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width={W} height={H} className={`block w-full ${onPick ? "cursor-pointer touch-none" : ""}`} role="img"
         onPointerDown={onPick ? (e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); pick(e.clientX) } : undefined}
-        onPointerMove={onPick ? (e) => { if (dragging.current) pick(e.clientX) } : undefined}
-        onPointerUp={onPick ? () => { dragging.current = false } : undefined} aria-label={`Match momentum by minute, ${names[0]} above the line and ${names[1]} below`}>
+        onPointerMove={onPick ? (e) => { if (!dragging.current) return; if (e.buttons === 0) { dragging.current = false; return } pick(e.clientX) } : undefined}
+        onPointerUp={onPick ? () => { dragging.current = false } : undefined}
+        onPointerCancel={onPick ? () => { dragging.current = false } : undefined}
+        onLostPointerCapture={onPick ? () => { dragging.current = false } : undefined} aria-label={`Match momentum by minute, ${names[0]} above the line and ${names[1]} below`}>
         <line x1={PAD_L} x2={W - PAD_R} y1={AXIS} y2={AXIS} className="stroke-muted-foreground" strokeOpacity={0.6} />
         <line x1={htX} x2={htX} y1={20} y2={H - 28} className="stroke-muted-foreground" strokeOpacity={0.35} />
         {minutes.map((m) => {
