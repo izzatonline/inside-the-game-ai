@@ -11,3 +11,5 @@ videos/
 *.pt
 *.tracking.json
 !docs/video-prototype.mp4
+SIMULATION_HANDOFF.md
+SUBMISSION_NOTES.md
