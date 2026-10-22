@@ -287,6 +287,70 @@ def _kickoff_shape(pos, kicker_team: int, carrier: int):
     return out
 
 
+def _realism(pos, poss_idx: int, ball, ph: str, carrier: int):
+    """Make the 22 positions obey football logic. All values are 0-100 pitch units, team 0 attacks +x.
+
+    * Out of possession a team drops behind the ball: the forwards come back to help defend.
+    * Nobody camps in an offside position: attackers sit on the shoulder of the opponents' second-last defender
+      (a player is only offside if nearer the goal line than both the ball and the second-last opponent, in the
+      opponents' half; IFAB Law 11).
+    * Corners get real set-piece shapes: defenders crowd the six-yard box, attackers take the box, two stay back.
+    """
+    bx, by = ball
+    out = [[p[0], p[1]] for p in pos]
+    u = lambda t, x: x if t == 0 else 100 - x  # distance from a team's own goal line  # noqa: E731
+    back = lambda t, v: v if t == 0 else 100 - v  # noqa: E731
+
+    if ph == "corner":
+        end = 100.0 if bx > 50 else 0.0
+        gx = lambda g: end - g if end else g  # noqa: E731  (g = distance from the goal line being attacked)
+        att, dfn = poss_idx, 1 - poss_idx
+        d_idx = [dfn * 11 + k for k in range(1, 11)]
+        d_idx.sort(key=lambda i: abs(out[i][0] - end))
+        box = sorted(d_idx[:7], key=lambda i: out[i][1])
+        for i, (g, y) in zip(box, sorted([(4, 40), (4, 50), (4, 60), (7, 33), (7, 44), (7, 56), (7, 67)], key=lambda gy: gy[1])):
+            out[i] = [gx(g), y]
+        edge = sorted(d_idx[7:9], key=lambda i: out[i][1])
+        for i, (g, y) in zip(edge, [(15, 36), (15, 64)]):
+            out[i] = [gx(g), y]
+        for i in d_idx[9:]:
+            out[i] = [gx(40), 50]
+        out[dfn * 11] = [gx(2), 50]  # the keeper stays on his line
+        a_idx = [att * 11 + k for k in range(1, 11) if att * 11 + k != carrier]
+        a_idx.sort(key=lambda i: abs(out[i][0] - end))
+        for i, (g, y) in zip(a_idx[:5], [(6, 40), (8, 50), (10, 58), (7, 66), (13, 47)]):
+            out[i] = [gx(g), y]
+        for i, (g, y) in zip(a_idx[5:7], [(19, 30), (21, 52)]):
+            out[i] = [gx(g), y]
+        for i, (g, y) in zip(a_idx[7:], [(46, 38), (46, 62)]):
+            out[i] = [gx(g), y]
+        out[att * 11] = [gx(78), 50]
+        return out
+
+    for t in (0, 1):
+        has = t == poss_idx
+        idx = [t * 11 + k for k in range(1, 11)]
+        bu = u(t, bx)
+        if not has:  # the forwards come back: nobody stays far ahead of the ball while we are being attacked
+            for rank, i in enumerate(sorted(idx, key=lambda i: -u(t, out[i][0]))):
+                lim = max(bu + (44 if rank < 2 else 30), 18)
+                cu = u(t, out[i][0])
+                if cu > lim:
+                    out[i][0] = back(t, lim + (cu - lim) * 0.12)
+    # offside: nobody beyond the second-last opponent (or the ball) in the opponents' half
+    xs1 = sorted((p[0] for p in out[11:]), reverse=True)
+    xs0 = sorted(p[0] for p in out[:11])
+    lim0 = max(50.0, bx, xs1[1])
+    lim1 = min(50.0, bx, xs0[1])
+    for i in range(1, 11):
+        if i != carrier and out[i][0] > lim0:
+            out[i][0] = lim0 - 0.3 - 0.15 * (i % 4)
+    for i in range(12, 22):
+        if i != carrier and out[i][0] < lim1:
+            out[i][0] = lim1 + 0.3 + 0.15 * (i % 4)
+    return out
+
+
 def _frame_positions(codes, t, poss, bx_rel, by_rel, teams, forced_carrier=None):
     """22 player positions (absolute 0-100 pitch frame; first team attacks +x) around the ball."""
     out = []
@@ -394,7 +458,9 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                                      slot_of(poss_, taker) if taker else None)
         if ph == "kickoff" or t_ == 0.0:  # restarts from the centre: teams start in their own halves
             pos = _kickoff_shape(pos, codes.index(poss_), info["carrier"])
-        elif ph in ("throw_in", "corner"):  # the taker stands just outside the line, the ball sits on it
+        else:
+            pos = _realism(pos, codes.index(poss_), (bx, by), ph, codes.index(poss_) * 11 + info["carrier"])
+        if ph in ("throw_in", "corner"):  # the taker stands just outside the line, the ball sits on it
             k = codes.index(poss_) * 11 + info["carrier"]
             pos[k] = ([bx, -2.0 if by < 50 else 102.0] if ph == "throw_in"
                       else [bx + (1.6 if bx > 50 else -1.6), by + (-2.0 if by < 50 else 2.0)])

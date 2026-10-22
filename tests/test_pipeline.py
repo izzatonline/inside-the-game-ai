@@ -299,3 +299,36 @@ def test_match_report_is_built_from_events():
             assert rep["tilt"][first] > 70
             build = next(m for m in rep["metrics"] if m["key"] == "build")
             assert build["home"] > build["away"]
+
+
+def test_nobody_camps_in_an_offside_position():
+    """IFAB Law 11: nearer the goal line than both the ball and the second-last opponent, in the opponents' half."""
+    checked = 0
+    for match in ("coastal", "riverside", "redcrest"):
+        for seed in (1, 3, 7):
+            for e in generate_match(seed, match=match):
+                if e.type != "tracking" or e.meta["phase"] in ("kickoff", "corner"):
+                    continue
+                p, bx = e.meta["pos"], e.meta["ball"][0]
+                lim0 = max(50, bx, sorted((q[0] for q in p[11:]), reverse=True)[1])
+                lim1 = min(50, bx, sorted(q[0] for q in p[:11])[1])
+                assert all(q[0] <= lim0 + 0.5 for q in p[1:11])
+                assert all(q[0] >= lim1 - 0.5 for q in p[12:])
+                checked += 1
+    assert checked > 1000
+
+
+def test_corner_kick_shapes():
+    from itg.generator import MATCHES
+
+    seen = 0
+    for match in ("coastal", "riverside", "redcrest"):
+        for seed in range(1, 9):
+            for e in generate_match(seed, match=match):
+                if e.type == "tracking" and e.meta["phase"] == "corner":
+                    p = e.meta["pos"]
+                    end = 100 if e.meta["ball"][0] > 50 else 0
+                    dfn = p[11:] if e.meta["poss"] == list(MATCHES[match].teams)[0] else p[:11]
+                    assert sum(abs(q[0] - end) <= 12 for q in dfn) >= 8  # keeper + a crowded six-yard box and edge
+                    seen += 1
+    assert seen >= 1
