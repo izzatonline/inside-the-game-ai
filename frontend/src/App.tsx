@@ -245,8 +245,8 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
               <ScrollArea className="bg-muted mt-2 h-48 rounded-lg"><pre className="p-3 text-[11.5px]">{JSON.stringify(overlays[0], null, 2)}</pre></ScrollArea></details>}
           </TabsContent>
           <TabsContent value="tactics"><TacticsPanel tactics={tactics} codes={codes} selected={selected} onSelect={setSelected} subLog={subLog} /></TabsContent>
-          <TabsContent value="stats"><StatsPanel stats={stats} codes={codes} recap={recap} /></TabsContent>
-          <TabsContent value="lineups"><LineupsPanel cfg={cfg} codes={codes} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
+          <TabsContent value="stats"><StatsPanel cfg={cfg} stats={stats} codes={codes} recap={recap} /></TabsContent>
+          <TabsContent value="lineups"><LineupsPanel stats={stats} cfg={cfg} codes={codes} subLog={subLog} cards={cards} goals={goals} /></TabsContent>
         </Tabs>
       </div>
       <Dialog open={momentumOpen} onOpenChange={setMomentumOpen}>

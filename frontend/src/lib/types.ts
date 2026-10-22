@@ -18,7 +18,11 @@ export type TeamStats = {
   passes: number; shots_off: number; shots_blocked: number; saves: number; corners: number; free_kicks: number; throw_ins: number
   goal_kicks: number; fouls: number; yellow: number; offsides: number; crosses: number; tackles: number; interceptions: number; pressures: number
 }
-export type Stats = { t: number; minute: number; momentum: number; teams: Record<string, TeamStats> }
+export type PlayerStat = {
+  team: string; passes: number; passes_ok: number; pass_acc: number; pass_diff: number; shots: number; on_target: number; goals: number; assists: number
+  xg: number; sprints: number; top_speed: number; tackles: number; interceptions: number; pressures: number
+}
+export type Stats = { t: number; minute: number; momentum: number; teams: Record<string, TeamStats>; players?: Record<string, PlayerStat> }
 export type GoalLog = { minute: number; team: string; player: string; score_home: number; score_away: number; og?: boolean }
 export type CardLog = { minute: number; team: string; player: string; card: string }
 export type SubLog = { minute: number; team: string; slot: number; player_in: string; player_out: string; number: number }

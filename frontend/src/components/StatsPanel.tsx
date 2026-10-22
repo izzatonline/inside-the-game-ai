@@ -1,6 +1,10 @@
+import { useState } from "react"
+import { ChartNoAxesCombined } from "lucide-react"
 import { MatchReport, MatchReportPlaceholder } from "@/components/MatchReport"
+import { PlayerCompareDialog } from "@/components/PlayerCompare"
+import { Button } from "@/components/ui/button"
 import { TEAM_COLORS } from "@/lib/theme"
-import type { Recap, Stats, TeamStats } from "@/lib/types"
+import type { Config, Recap, Stats, TeamStats } from "@/lib/types"
 
 type Row = [label: string, key: keyof TeamStats, decimals?: number, lowerIsBetter?: boolean]
 const GROUPS: [string, Row[]][] = [
@@ -44,7 +48,8 @@ export function TeamStatsTable({ teams, codes }: { teams: Record<string, TeamSta
   )
 }
 
-export function StatsPanel({ stats, codes, recap }: { stats: Stats | null; codes: string[]; recap: Recap | null }) {
+export function StatsPanel({ cfg, stats, codes, recap }: { cfg: Config; stats: Stats | null; codes: string[]; recap: Recap | null }) {
+  const [open, setOpen] = useState(false)
   if (!stats) return <p className="text-muted-foreground py-6 text-center text-sm">Waiting for kick-off…</p>
   return (
     <div className="space-y-5">
@@ -54,6 +59,8 @@ export function StatsPanel({ stats, codes, recap }: { stats: Stats | null; codes
         <span className="text-right" style={{ color: "var(--team-1)" }}>{stats.teams[codes[1]].name}</span>
       </div>
       <TeamStatsTable teams={stats.teams} codes={codes} />
+      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}><ChartNoAxesCombined className="size-4" />Player stats and compare</Button>
+      <PlayerCompareDialog open={open} onOpenChange={setOpen} cfg={cfg} stats={stats} codes={codes} initial={null} />
     </div>
   )
 }

@@ -16,6 +16,7 @@ def minute_label(m: int) -> str:
 
 WINDOW_S = 300.0  # rolling window for pressure / momentum
 SPRINT_KMH = 33.0
+HIGH_SPEED_KMH = 27.0
 SWING_SHARE = 0.70  # pressure share needed to call a momentum swing
 MIN_WINDOW_WEIGHT = 8.0
 
@@ -56,6 +57,13 @@ class PlayerStats:
     goals: int = 0
     xg: float = 0.0
     top_speed: float = 0.0
+    diff_sum: float = 0.0  # difficulty of completed passes
+    sprints: int = 0
+    tackles: int = 0
+    interceptions: int = 0
+    pressures: int = 0
+    on_target: int = 0
+    assists: int = 0
 
 
 class MatchState:
@@ -184,6 +192,7 @@ class MatchState:
             if ok:
                 ts.passes_ok += 1
                 ps.passes_ok += 1
+                ps.diff_sum += ev.meta.get("difficulty", 0)
                 self.last_pass = (ev.player, ev.team, ev.t)
             if ev.x >= 67:
                 weight = 1.0
@@ -202,6 +211,8 @@ class MatchState:
             ts.actions += 1
             speed = ev.meta.get("speed_kmh", 0)
             ps.top_speed = max(ps.top_speed, speed)
+            if speed >= HIGH_SPEED_KMH:
+                ps.sprints += 1  # high-speed runs (the radar's "Fast runs")
             if ev.x >= 67:
                 weight = 1.0
             if speed >= SPRINT_KMH and self._ready("sprint:" + ev.player, 600):
@@ -212,6 +223,8 @@ class MatchState:
             ts.xg += xg
             ps.shots += 1
             ps.xg += xg
+            if ev.outcome in ("goal", "saved"):
+                ps.on_target += 1
             if ev.outcome in ("goal", "saved"):
                 ts.on_target += 1
             if ev.outcome == "saved":
@@ -224,12 +237,15 @@ class MatchState:
         elif ev.type in ("tackle", "interception"):
             if ev.type == "tackle":
                 ts.tackles += 1
+                ps.tackles += 1
             else:
                 ts.interceptions += 1
+                ps.interceptions += 1
             if ev.x >= 55:
                 weight = 1.5
         elif ev.type == "pressure":
             ts.pressures += 1
+            ps.pressures += 1
             weight = 0.5
         elif ev.type == "possession_change":
             self.turnovers.append(ev.t)
@@ -257,6 +273,7 @@ class MatchState:
             if self.last_pass and self.last_pass[1] == ev.team and ev.t - self.last_pass[2] <= 12 \
                     and self.last_pass[0] != ev.player:
                 assist = self.last_pass[0]
+                self._player(assist, ev.team).assists += 1
             home, away = self.codes
             self.goal_log.append({"minute": ev.minute, "team": ev.team, "player": ev.player,
                                   "score_home": self.teams[home].goals, "score_away": self.teams[away].goals})
@@ -306,6 +323,13 @@ class MatchState:
             "t": self.t,
             "minute": int(self.t // 60) + 1,
             "momentum": self.momentum(),
+            "players": {n: {"team": p.team, "passes": p.passes, "passes_ok": p.passes_ok,
+                            "pass_acc": int(round(100 * p.passes_ok / p.passes)) if p.passes else 0,
+                            "pass_diff": int(round(100 * p.diff_sum / p.passes_ok)) if p.passes_ok else 0,
+                            "shots": p.shots, "on_target": p.on_target, "goals": p.goals, "assists": p.assists,
+                            "xg": round(p.xg, 2), "sprints": p.sprints, "top_speed": int(p.top_speed),
+                            "tackles": p.tackles, "interceptions": p.interceptions, "pressures": p.pressures}
+                        for n, p in self.players.items()},
             "teams": {
                 c: {
                     "name": s.name,

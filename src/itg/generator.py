@@ -263,6 +263,22 @@ def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+def _kickoff_shape(pos, kicker_team: int, carrier: int):
+    """Kick-off: every player in their own half (team 0 on the left, team 1 on the right), only the taker at the
+    centre spot and the opponents outside the centre circle. Each team keeps its own relative line order and width,
+    stretched over its half (keeper deep, outfield between 14 and 40)."""
+    out = [None] * 22
+    for t in (0, 1):
+        idx = range(t * 11, t * 11 + 11)
+        rel = {i: (pos[i][0] if t == 0 else 100 - pos[i][0]) for i in idx}  # distance from own goal line
+        lo, hi = min(rel[i] for i in idx if i % 11), max(rel[i] for i in idx if i % 11)
+        for i in idx:
+            d = 4.5 if i % 11 == 0 else 14 + (rel[i] - lo) / max(hi - lo, 1e-6) * 26
+            out[i] = [round(d if t == 0 else 100 - d, 1), pos[i][1]]
+    out[kicker_team * 11 + carrier] = [49.8 if kicker_team == 0 else 50.2, 50.0]
+    return out
+
+
 def _frame_positions(codes, t, poss, bx_rel, by_rel, teams, forced_carrier=None):
     """22 player positions (absolute 0-100 pitch frame; first team attacks +x) around the ball."""
     out = []
@@ -368,6 +384,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         bx, by = (x_, y_) if poss_ == codes[0] else (100 - x_, 100 - y_)
         pos, info = _frame_positions(codes, t_, poss_, x_, y_, teams,
                                      slot_of(poss_, taker) if taker else None)
+        if ph == "kickoff" or t_ == 0.0:  # restarts from the centre: teams start in their own halves
+            pos = _kickoff_shape(pos, codes.index(poss_), info["carrier"])
         occluded = (math.sin(t_ * 12.9898) * 43758.5453) % 1.0 < 0.18
         if loose:
             holder, conf = None, 0.0

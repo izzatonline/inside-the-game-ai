@@ -1,10 +1,13 @@
-import { ArrowDown, ArrowUp } from "lucide-react"
+import { useState } from "react"
+import { ArrowDown, ArrowUp, ChartNoAxesCombined } from "lucide-react"
+import { PlayerCompareDialog } from "@/components/PlayerCompare"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { fmtMinute } from "@/lib/format"
 import { TEAM_COLORS } from "@/lib/theme"
-import type { Config, SubLog } from "@/lib/types"
+import type { Config, Stats, SubLog } from "@/lib/types"
 
-type Props = { cfg: Config; codes: string[]; subLog: SubLog[]; cards: { team: string; player?: string | null }[]; goals: { team: string; player?: string | null }[] }
+type Props = { cfg: Config; codes: string[]; stats: Stats | null; subLog: SubLog[]; cards: { team: string; player?: string | null }[]; goals: { team: string; player?: string | null }[] }
 
 const surname = (n: string) => n.split(" ").slice(-1)[0]
 
@@ -12,7 +15,8 @@ const surname = (n: string) => n.split(" ").slice(-1)[0]
  * Starting XIs on a vertical pitch (away side up, home side down). Each team is laid out by its formation lines:
  * lines are spaced evenly down the half and players evenly across the line, so names never touch the next circle.
  */
-export function LineupsPanel({ cfg, codes, subLog, cards, goals }: Props) {
+export function LineupsPanel({ cfg, codes, stats, subLog, cards, goals }: Props) {
+  const [pick, setPick] = useState<{ open: boolean; name: string | null }>({ open: false, name: null })
   const nodes = codes.flatMap((c, t) => {
     const team = cfg.teams[c], lines = team.lines, outfieldLines = lines.length - 1
     return lines.flatMap((row, r) => row.map((i, k) => {
@@ -45,7 +49,8 @@ export function LineupsPanel({ cfg, codes, subLog, cards, goals }: Props) {
             </text>
           ))}
           {nodes.map((n) => (
-            <g key={n.c + n.i}>
+            <g key={n.c + n.i} className="cursor-pointer" role="button" tabIndex={0} aria-label={`Stats for ${n.name}`}
+              onClick={() => setPick({ open: true, name: n.name })} onKeyDown={(e) => { if (e.key === "Enter") setPick({ open: true, name: n.name }) }}>
               <circle cx={n.x} cy={n.y} r={2.9} fill={TEAM_COLORS[n.t]} stroke={n.i === 0 ? "#fbbf24" : "#fff"} strokeWidth={0.5} opacity={n.subbed ? 0.55 : 1} />
               <text x={n.x} y={n.y + 1} textAnchor="middle" fontSize={2.7} fontWeight={800} fill="#04121c">{n.i + 1}</text>
               <text x={n.x} y={n.y + 5.6} textAnchor="middle" fontSize={n.compact ? 1.75 : 2.1} fontWeight={700} fill="#fff" stroke="#06150d" strokeWidth={0.45} paintOrder="stroke">{n.label}</text>
@@ -59,9 +64,11 @@ export function LineupsPanel({ cfg, codes, subLog, cards, goals }: Props) {
           <span className="flex items-center gap-1"><i className="grid size-3 place-items-center rounded-full bg-rose-600"><ArrowDown className="size-2 text-white" /></i>replaced</span>
           <span className="flex items-center gap-1"><i className="inline-block h-3 w-2 rounded-[2px] bg-yellow-400" />booked</span>
           <span className="flex items-center gap-1">⚽ goal</span>
-          <span>Shirt number inside each circle</span>
+          <span>Tap a player for stats</span>
         </div>
       </div>
+      <Button variant="outline" className="w-full" onClick={() => setPick({ open: true, name: null })}><ChartNoAxesCombined className="size-4" />Player stats and compare</Button>
+      <PlayerCompareDialog open={pick.open} onOpenChange={(o) => setPick((p) => ({ ...p, open: o }))} cfg={cfg} stats={stats} codes={codes} initial={pick.name} />
       <Section title="Substitutions" empty={!subLog.length && "No changes yet"}>
         <ul className="divide-y">
           {[...subLog].sort((a, b) => a.minute - b.minute).map((s, k) => {
