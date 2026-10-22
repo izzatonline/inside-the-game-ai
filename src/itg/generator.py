@@ -287,67 +287,189 @@ def _kickoff_shape(pos, kicker_team: int, carrier: int):
     return out
 
 
+_XM, _YM = 1.05, 0.68  # metres per pitch unit along x (105 m) and y (68 m)
+_MIN_GAP_M = 4.5  # teammates further apart than this in open play (away from set pieces and walls)
+
+# Set-piece spots as (distance from the goal line being attacked, y), written for a corner from the low-y side and
+# mirrored for the other one. Pitch units: six-yard line about 5.2 from goal, posts at y 44.6 / 55.4,
+# penalty area 15.7 deep and y 20.4-79.6.
+_CORNER_DEF_BOX = [(1.5, 43.5),                                  # near post
+                   (5.5, 42), (5.5, 47.5), (5.5, 53), (5.5, 58.5),  # zonal line along the six-yard box
+                   (8.2, 49.2), (10.2, 56.0),                    # man-markers, goal-side of the two main targets
+                   (15.5, 47)]                                   # edge of the box for knock-downs
+_CORNER_DEF_HIGH = [(30, 38), (42, 58)]                          # left up for the counter
+_CORNER_ATT_BOX = [(2.5, 52), (7.5, 40), (9.5, 49), (11.5, 57), (13.5, 64), (17.5, 45), (18.5, 30)]
+_CORNER_ATT_BACK = [(46, 38), (46, 62)]
+_PENALTY_EDGE = [(17, 22), (17.5, 27), (17, 32), (17.5, 37), (17, 63), (17.5, 68), (17, 73), (17.5, 78),
+                 (22.5, 44), (22.5, 50), (22.5, 56), (25, 39), (25, 61), (28, 30), (28, 70), (30, 50)]
+
+
+def _dist_m(a, b) -> float:
+    return math.hypot((a[0] - b[0]) * _XM, (a[1] - b[1]) * _YM)
+
+
+def _keep_out(out, idx, centre, r_m: float, goal: Optional[float] = None) -> None:
+    """Push players in idx radially out of a circle of r_m metres (9.15 m at free kicks and penalties).
+    With `goal` (the x of their own goal line) they retreat goal-side of the ball when the pitch leaves room."""
+    for i in idx:
+        dx, dy = (out[i][0] - centre[0]) * _XM, (out[i][1] - centre[1]) * _YM
+        d = math.hypot(dx, dy)
+        if d >= r_m:
+            continue
+        a0 = math.atan2(dy, dx) if d > 1e-6 else 0.0
+        ring = []
+        for turn in (0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9):  # nearest direction first
+            a = a0 + turn * math.pi / 9
+            p = [centre[0] + math.cos(a) * (r_m + 0.3) / _XM, centre[1] + math.sin(a) * (r_m + 0.3) / _YM]
+            if 0.5 <= p[0] <= 99.5 and 0.5 <= p[1] <= 99.5:
+                ring.append(p)
+        side = [p for p in ring if goal is None or abs(p[0] - goal) <= abs(centre[0] - goal)]
+        if side or ring:
+            out[i] = (side or ring)[0]
+
+
+def _spread(out, fixed, min_m: float = _MIN_GAP_M, rounds: int = 4) -> None:
+    """Keep teammates at least min_m apart by sliding them sideways (y only, so line heights and the offside
+    picture are untouched). Players in `fixed` (the ball carrier, a free-kick wall) do not move."""
+    for _ in range(rounds):
+        moved = False
+        for t in (0, 1):
+            for a in range(t * 11, t * 11 + 11):
+                for b in range(a + 1, t * 11 + 11):
+                    dx = (out[a][0] - out[b][0]) * _XM
+                    dy = (out[a][1] - out[b][1]) * _YM
+                    if dx * dx + dy * dy >= min_m * min_m or (a in fixed and b in fixed):
+                        continue
+                    push = (math.sqrt(max(min_m * min_m - dx * dx, 0.0)) - abs(dy)) / _YM + 0.05
+                    sgn = 1.0 if (dy > 0 or (dy == 0 and out[a][1] >= 50)) else -1.0  # a goes away from b
+                    ka, kb = (0.0, 1.0) if a in fixed else (1.0, 0.0) if b in fixed else (0.5, 0.5)
+                    out[a][1] = _clamp(out[a][1] + sgn * push * ka, 1, 99)
+                    out[b][1] = _clamp(out[b][1] - sgn * push * kb, 1, 99)
+                    moved = True
+        if not moved:
+            return
+
+
+def _place(out, players, spots, gx, gy) -> None:
+    """Put players on set-piece spots, matched by sideways order so nobody has to cross the box."""
+    players = sorted(players, key=lambda i: out[i][1])
+    for i, (g, y) in zip(players, sorted(spots, key=lambda s: gy(s[1]))):
+        out[i] = [gx(g), gy(y)]
+
+
 def _realism(pos, poss_idx: int, ball, ph: str, carrier: int):
     """Make the 22 positions obey football logic. All values are 0-100 pitch units, team 0 attacks +x.
 
-    * Out of possession a team drops behind the ball: the forwards come back to help defend.
+    * Out of possession a team drops behind the ball as a block: the whole shape moves back together (lines keep
+      their spacing) and only squeezes if the back line would end up in its own goal.
     * Nobody camps in an offside position: attackers sit on the shoulder of the opponents' second-last defender
       (a player is only offside if nearer the goal line than both the ball and the second-last opponent, in the
       opponents' half; IFAB Law 11).
-    * Corners get real set-piece shapes: defenders crowd the six-yard box, attackers take the box, two stay back.
+    * Set pieces: corners (zonal line on the six-yard box, two man-markers, near post, edge, two left high),
+      penalties (everyone outside the area and the arc) and free kicks (a wall at 9.15 m near goal, opponents
+      9.15 m from the ball).
+    * Teammates keep a few metres apart in open play instead of stacking on the same spot.
     """
     bx, by = ball
     out = [[p[0], p[1]] for p in pos]
     u = lambda t, x: x if t == 0 else 100 - x  # distance from a team's own goal line  # noqa: E731
     back = lambda t, v: v if t == 0 else 100 - v  # noqa: E731
+    att, dfn = poss_idx, 1 - poss_idx
+    end = 100.0 if att == 0 else 0.0  # the goal line being attacked
+    gx = lambda g: end - g if end else g  # noqa: E731  (g = distance from that goal line)
+    att_out = [att * 11 + k for k in range(1, 11) if att * 11 + k != carrier]
+    dfn_out = [dfn * 11 + k for k in range(1, 11)]
 
     if ph == "corner":
         end = 100.0 if bx > 50 else 0.0
-        gx = lambda g: end - g if end else g  # noqa: E731  (g = distance from the goal line being attacked)
-        att, dfn = poss_idx, 1 - poss_idx
-        d_idx = [dfn * 11 + k for k in range(1, 11)]
-        d_idx.sort(key=lambda i: abs(out[i][0] - end))
-        box = sorted(d_idx[:7], key=lambda i: out[i][1])
-        for i, (g, y) in zip(box, sorted([(4, 40), (4, 50), (4, 60), (7, 33), (7, 44), (7, 56), (7, 67)], key=lambda gy: gy[1])):
-            out[i] = [gx(g), y]
-        edge = sorted(d_idx[7:9], key=lambda i: out[i][1])
-        for i, (g, y) in zip(edge, [(15, 36), (15, 64)]):
-            out[i] = [gx(g), y]
-        for i in d_idx[9:]:
-            out[i] = [gx(40), 50]
-        out[dfn * 11] = [gx(2), 50]  # the keeper stays on his line
-        a_idx = [att * 11 + k for k in range(1, 11) if att * 11 + k != carrier]
-        a_idx.sort(key=lambda i: abs(out[i][0] - end))
-        for i, (g, y) in zip(a_idx[:5], [(6, 40), (8, 50), (10, 58), (7, 66), (13, 47)]):
-            out[i] = [gx(g), y]
-        for i, (g, y) in zip(a_idx[5:7], [(19, 30), (21, 52)]):
-            out[i] = [gx(g), y]
-        for i, (g, y) in zip(a_idx[7:], [(46, 38), (46, 62)]):
-            out[i] = [gx(g), y]
+        gy = (lambda y: y) if by < 50 else (lambda y: 100 - y)  # noqa: E731
+        d_idx = sorted(dfn_out, key=lambda i: abs(out[i][0] - end))
+        _place(out, d_idx[:8], _CORNER_DEF_BOX, gx, gy)
+        _place(out, d_idx[8:], _CORNER_DEF_HIGH, gx, gy)
+        out[dfn * 11] = [gx(1.2), gy(51)]  # the keeper on his line, a step towards the far post
+        a_idx = sorted(att_out, key=lambda i: abs(out[i][0] - end))
+        _place(out, a_idx[:7], _CORNER_ATT_BOX, gx, gy)
+        _place(out, a_idx[7:], _CORNER_ATT_BACK, gx, gy)
         out[att * 11] = [gx(78), 50]
         return out
 
-    for t in (0, 1):
-        has = t == poss_idx
+    if ph == "penalty":
+        gy = lambda y: y  # noqa: E731
+        edge = sorted(_PENALTY_EDGE, key=lambda s: s[1])
+        d_spots, a_spots = edge[0::2] + edge[1::2][:1], edge[1::2][1:]  # 9 defenders and 7 attackers share the edge
+        d_idx = sorted(dfn_out, key=lambda i: abs(out[i][0] - end))
+        a_idx = sorted(att_out, key=lambda i: abs(out[i][0] - end))
+        _place(out, d_idx[:9], d_spots, gx, gy)
+        _place(out, d_idx[9:], [(40, 50)], gx, gy)
+        _place(out, a_idx[:7], a_spots, gx, gy)
+        _place(out, a_idx[7:], [(52, 35), (52, 65)], gx, gy)
+        out[dfn * 11] = [gx(0.4), 50]  # keeper on the line
+        out[att * 11] = [gx(80), 50]
+        _keep_out(out, d_idx + a_idx, (bx, by), 9.15)  # outside the arc
+        return out
+
+    for t in (0, 1):  # the team without the ball drops back as a block
+        if t == poss_idx:
+            continue
         idx = [t * 11 + k for k in range(1, 11)]
         bu = u(t, bx)
-        if not has:  # the forwards come back: nobody stays far ahead of the ball while we are being attacked
-            for rank, i in enumerate(sorted(idx, key=lambda i: -u(t, out[i][0]))):
-                lim = max(bu + (44 if rank < 2 else 30), 18)
-                cu = u(t, out[i][0])
-                if cu > lim:
-                    out[i][0] = back(t, lim + (cu - lim) * 0.12)
-    # offside: nobody beyond the second-last opponent (or the ball) in the opponents' half
+        us = {i: u(t, out[i][0]) for i in idx}
+        lim = {i: max(bu + (44 if rank < 2 else 30), 18) for rank, i in enumerate(sorted(idx, key=lambda i: -us[i]))}
+        need = max(us[i] - lim[i] for i in idx)
+        if need > 0:
+            d0 = min(us.values())
+            shift = min(need, max(0.0, d0 - 6))  # the back line stops 6 units from its own goal line
+            d0 -= shift
+            over = [(lim[i] - d0) / (us[i] - shift - d0) for i in idx if us[i] - shift > lim[i]]
+            k = min(over) if over else 1.0  # then squeeze proportionally, so lines keep their order and ratios
+            for i in idx:
+                out[i][0] = back(t, d0 + (us[i] - shift - d0) * k)
+
+    fixed = {carrier}
+    if ph == "free_kick":
+        gb = abs(end - bx)
+        side = by - 50
+        if gb <= 35 and abs(side) < 35:  # within shooting range: a wall 9.15 m from the ball
+            n = 4 if gb < 25 and abs(side) < 18 else 3 if abs(side) < 28 else 2
+            aim = (end, 50 + (2.7 if side > 0 else -2.7))  # the wall covers the near-post half of the goal
+            vx, vy = (aim[0] - bx) * _XM, (aim[1] - by) * _YM
+            norm = math.hypot(vx, vy) or 1.0
+            vx, vy = vx / norm, vy / norm
+            cx, cy = bx * _XM + vx * 9.15, by * _YM + vy * 9.15
+            wall = sorted(dfn_out, key=lambda i: math.hypot(out[i][0] * _XM - cx, out[i][1] * _YM - cy))[:n]
+            for k, i in enumerate(sorted(wall, key=lambda i: out[i][1])):
+                off = (k - (n - 1) / 2) * 0.7  # shoulder to shoulder, across the line of the kick
+                out[i] = [(cx - vy * off) / _XM, (cy + vx * off) / _YM]
+            fixed.update(wall)
+            out[dfn * 11] = [gx(1.0), 50 - (2.0 if side > 0 else -2.0)]  # keeper covers the far side
+            # everyone else holds a line level with the wall (one stays up for the counter), the attackers
+            # stand on its shoulder in the gaps
+            line_g = _clamp(abs(end - cx / _XM) - 0.5, 6.0, 16.0)  # never higher than the edge of the box
+            wall_y = cy / _YM
+            rest = sorted((i for i in dfn_out if i not in wall), key=lambda i: abs(out[i][0] - end))[:-1]
+            ys = [y for y in (28 + 44 * k / 9 for k in range(10)) if abs(y - wall_y) > 6][:len(rest)]
+            _place(out, rest, [(line_g, y) for y in ys], gx, lambda y: y)
+            runners = sorted(att_out, key=lambda i: abs(out[i][0] - end))[:4]
+            gaps = [(a + b) / 2 for a, b in zip(ys, ys[1:])]
+            gaps = sorted(gaps, key=lambda y: abs(y - 50))[:len(runners)]
+            _place(out, runners, [(line_g + 0.8, y) for y in gaps], gx, lambda y: y)
+        _spread(out, fixed, min_m=2.5)
+        _keep_out(out, [i for i in dfn_out if i not in fixed], (bx, by), 9.15, goal=end)
+
+    # offside: nobody beyond the second-last opponent (or the ball) in the opponents' half; clamped attackers
+    # stay staggered (keeping their order) rather than forming a flat line
     xs1 = sorted((p[0] for p in out[11:]), reverse=True)
     xs0 = sorted(p[0] for p in out[:11])
     lim0 = max(50.0, bx, xs1[1])
     lim1 = min(50.0, bx, xs0[1])
-    for i in range(1, 11):
-        if i != carrier and out[i][0] > lim0:
-            out[i][0] = lim0 - 0.3 - 0.15 * (i % 4)
-    for i in range(12, 22):
-        if i != carrier and out[i][0] < lim1:
-            out[i][0] = lim1 + 0.3 + 0.15 * (i % 4)
+    off0 = sorted((i for i in range(1, 11) if i != carrier and out[i][0] > lim0), key=lambda i: -out[i][0])
+    for rank, i in enumerate(off0):
+        out[i][0] = lim0 - 0.4 - 1.5 * rank
+    off1 = sorted((i for i in range(12, 22) if i != carrier and out[i][0] < lim1), key=lambda i: out[i][0])
+    for rank, i in enumerate(off1):
+        out[i][0] = lim1 + 0.4 + 1.5 * rank
+    if ph != "free_kick":
+        _spread(out, fixed)  # sideways only, so it cannot undo the offside picture
     return out
 
 
@@ -459,7 +581,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         if ph == "kickoff" or t_ == 0.0:  # restarts from the centre: teams start in their own halves
             pos = _kickoff_shape(pos, codes.index(poss_), info["carrier"])
         else:
-            pos = _realism(pos, codes.index(poss_), (bx, by), ph, codes.index(poss_) * 11 + info["carrier"])
+            pos = [[round(px, 1), round(py, 1)] for px, py in
+                   _realism(pos, codes.index(poss_), (bx, by), ph, codes.index(poss_) * 11 + info["carrier"])]
         if ph in ("throw_in", "corner"):  # the taker stands just outside the line, the ball sits on it
             k = codes.index(poss_) * 11 + info["carrier"]
             pos[k] = ([bx, -2.0 if by < 50 else 102.0] if ph == "throw_in"
@@ -643,9 +766,13 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
     frng = random.Random(seed * 104729 + 7)
     yellows = {c: 0 for c in codes}
     for e in list(events):
-        if e.type == "pressure" and frng.random() < 0.22:
+        in_box = 100 - e.x > 84.3 and 20.4 < e.y < 79.6  # a foul there would be a penalty: random play never gives one
+        if e.type == "pressure" and frng.random() < 0.22 and not in_box:
             emit(e.t, "foul", e.team, e.player, e.x, e.y, against=other[e.team])
             emit(e.t + 0.1, "restart", other[e.team], "", 100 - e.x, 100 - e.y, kind="free_kick")
+            for dt in (0.6, 2.4):  # set-up frames (wall, 9.15 m) before play resumes; the next step is 3+ s later
+                if e.t + dt < duration:
+                    track(e.t + dt, other[e.team], 100 - e.x, 100 - e.y, "free_kick", 0.9)
             if frng.random() < 0.13 and yellows[e.team] < 4 and not scen:
                 yellows[e.team] += 1
                 emit(e.t + 0.2, "card", e.team, e.player, e.x, e.y, card="yellow")

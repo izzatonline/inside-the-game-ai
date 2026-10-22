@@ -157,6 +157,8 @@ class TacticsAnalyzer:
         for cut in cuts:
             groups.append(field[start:cut])
             start = cut
+        if len(groups) == 4 and len(groups[0]) < 3:  # no real shape has a two-man back line: a staggered back four
+            groups[:2] = [groups[0] + groups[1]]
         formation = "-".join(str(len(g)) for g in groups)
 
         roles = {gk: "Goalkeeper"}

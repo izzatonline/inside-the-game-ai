@@ -54,9 +54,9 @@ def _roster(spec: MatchSpec):
             for c, v in spec.teams.items()}
 
 
-def _frame_chunk(ev) -> str:
-    return _sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase", "phase_conf")}
-                | {"t": ev.t})
+def _frame_chunk(ev, state) -> str:
+    return _sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase")}
+                | {"phase_conf": state.phase_conf(ev), "t": ev.t})
 
 
 async def _step(pipe, ev, profile, last_stats: float, frames: bool = True, stats_every: float = 10.0):
@@ -64,7 +64,7 @@ async def _step(pipe, ev, profile, last_stats: float, frames: bool = True, stats
     out = []
     overlays = await asyncio.to_thread(pipe.process, ev, profile)
     if ev.type == "tracking" and frames:
-        out.append(_frame_chunk(ev))
+        out.append(_frame_chunk(ev, pipe.state))
     if ev.type in ("warmup", "substitution"):
         out.append(_sse("bench", ev.to_dict()))
     tac = pipe.state.tactics.take_update()
@@ -151,7 +151,7 @@ async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str
                 for c in chunks:
                     yield c
             if last_track is not None:
-                yield _frame_chunk(last_track)
+                yield _frame_chunk(last_track, pipe.state)
             yield _sse("stats", pipe.state.snapshot())
             yield _sse("live", {"start": start})
             prev_t = start_t

@@ -102,6 +102,18 @@ def test_tactics_infer_formation_from_positions_only():
         assert p["NOR"]["formation"] == "4-3-3" and p["HAR"]["formation"] == "4-2-3-1"
 
 
+def test_tactics_reads_a_staggered_back_four_as_one_line():
+    from itg.generator import MATCHES
+    from itg.tactics import TacticsAnalyzer
+
+    spec = MATCHES["redcrest"]
+    an = TacticsAnalyzer(list(spec.teams), {c: v["name"] for c, v in spec.teams.items()},
+                         {c: [n for n, _ in v["players"]] for c, v in spec.teams.items()})
+    for e in generate_match(3, match="redcrest", duration=30 * 60):
+        an.frame(e) if e.type == "tracking" else an.observe(e)
+    assert an.profiles["KES"]["formation"] == "4-4-2" and an.profiles["RED"]["formation"] == "3-4-2-1"
+
+
 def test_tactics_infer_style_and_roles():
     p = _analyze(7)
     lines = [(_analyze(sd)["NOR"]["line_height"], _analyze(sd)["HAR"]["line_height"]) for sd in range(1, 13)]
@@ -191,6 +203,21 @@ def test_tracking_reports_holder_phase_and_uncertainty():
         else:
             assert e.meta["holder"][0] == e.meta["poss"] and 0 <= e.meta["holder"][1] < 11
     assert any(e.meta["phase_conf"] < 0.8 for e in frames if e.meta["phase"] == "corner")
+
+
+def test_official_restart_confirms_an_unsure_corner():
+    from itg.state import MatchState
+
+    st = MatchState(NAMES)
+    corners = 0
+    for e in generate_match(7):
+        st.ingest(e)
+        if e.type == "tracking" and e.meta["phase"] == "corner":
+            assert e.meta["phase_conf"] < 0.8 <= st.phase_conf(e)  # tracker alone unsure; the restart event confirms
+            corners += 1
+        elif e.type == "tracking" and e.meta["phase"] == "open":
+            assert st.phase_conf(e) == e.meta["phase_conf"]
+    assert corners >= 1
 
 
 def test_substitutions_warmups_and_roster_names():
@@ -330,5 +357,54 @@ def test_corner_kick_shapes():
                     end = 100 if e.meta["ball"][0] > 50 else 0
                     dfn = p[11:] if e.meta["poss"] == list(MATCHES[match].teams)[0] else p[:11]
                     assert sum(abs(q[0] - end) <= 12 for q in dfn) >= 8  # keeper + a crowded six-yard box and edge
+                    box = sorted((q for q in dfn[1:] if abs(q[0] - end) <= 7), key=lambda q: q[1])
+                    assert all(_m(a, b) >= 2.5 for a, b in zip(box, box[1:]))  # zonal markers spread, not stacked
                     seen += 1
     assert seen >= 1
+
+
+def _m(a, b):  # metres between two pitch points
+    return (((a[0] - b[0]) * 1.05) ** 2 + ((a[1] - b[1]) * 0.68) ** 2) ** 0.5
+
+
+def _sides(e, match):
+    from itg.generator import MATCHES
+
+    p = e.meta["pos"]
+    first = e.meta["poss"] == list(MATCHES[match].teams)[0]
+    return (p[:11], p[11:], 100) if first else (p[11:], p[:11], 0)  # (attackers, defenders, goal line attacked)
+
+
+def test_free_kicks_have_a_wall_and_9m15_distance():
+    walls = 0
+    for match in ("coastal", "riverside", "redcrest"):
+        for seed in (1, 3, 7):
+            for e in generate_match(seed, match=match):
+                if e.type != "tracking" or e.meta["phase"] != "free_kick":
+                    continue
+                _, dfn, end = _sides(e, match)
+                ball = e.meta["ball"]
+                near = [q for q in dfn[1:] if _m(q, ball) < 9.0]
+                assert not near  # opponents at least 9.15 m from the ball
+                wall = [q for q in dfn[1:] if 9.0 <= _m(q, ball) <= 10.5]
+                if abs(ball[0] - end) <= 25 and abs(ball[1] - 50) < 18:
+                    assert len(wall) >= 3
+                    walls += 1
+    assert walls >= 3
+
+
+def test_penalty_everyone_outside_the_area_and_arc():
+    seen = 0
+    for e in generate_match(7, match="redcrest"):
+        if e.type != "tracking" or e.meta["phase"] != "penalty":
+            continue
+        att, dfn, end = _sides(e, "redcrest")
+        ball = e.meta["ball"]
+        others = [q for q in att[1:] + dfn[1:] if q != ball]
+        assert len(others) == 19  # the taker stands on the spot
+        for q in others:
+            in_area = abs(q[0] - end) < 15.7 and 20.4 < q[1] < 79.6
+            assert not in_area and _m(q, ball) >= 9.15
+        assert abs(dfn[0][0] - end) < 1  # keeper on the line
+        seen += 1
+    assert seen == 3

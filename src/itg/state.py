@@ -66,6 +66,9 @@ class PlayerStats:
     assists: int = 0
 
 
+RESTART_CONFIRM_S = 10.0  # a restart event confirms frames of the same restart this many seconds after it
+
+
 class MatchState:
     def __init__(self, teams: Dict[str, str], rosters: Optional[Dict[str, List[str]]] = None):
         self.codes = list(teams)
@@ -80,6 +83,7 @@ class MatchState:
         self._cooldown: Dict[str, float] = {}
         self._n = 0
         self.report_builder = MatchReportBuilder(self.codes)
+        self.last_restart: Optional[Tuple[float, str, str]] = None  # (t, team, kind) of the latest official restart
         self.goal_log: List[Dict[str, Any]] = []
         self.card_log: List[Dict[str, Any]] = []
         self.sub_log: List[Dict[str, Any]] = []
@@ -129,6 +133,15 @@ class MatchState:
         return Moment(f"{kind}-{self._n}", kind, ev.t, ev.minute, team, player,
                       round(importance, 2), base)
 
+    def phase_conf(self, ev: Event) -> float:
+        """Confidence in a tracking frame's phase. The tracker alone may be unsure (was it a corner or a goal kick?),
+        but once the official restart event for that team and kind has arrived, the restart is confirmed."""
+        conf = ev.meta["phase_conf"]
+        r = self.last_restart
+        if r and r[1] == ev.meta["poss"] and r[2] == ev.meta["phase"] and 0 <= ev.t - r[0] <= RESTART_CONFIRM_S:
+            return max(conf, 0.97)
+        return conf
+
     # ---- main entry ----------------------------------------------------
     def ingest(self, ev: Event) -> List[Moment]:
         self.t = ev.t
@@ -144,6 +157,7 @@ class MatchState:
         if ev.type in ("restart", "foul", "card", "offside"):
             ts0 = self.teams[ev.team]
             if ev.type == "restart":
+                self.last_restart = (ev.t, ev.team, ev.meta["kind"])
                 attr = {"corner": "corners", "free_kick": "free_kicks", "throw_in": "throw_ins", "goal_kick": "goal_kicks"}.get(ev.meta["kind"])
                 if attr:
                     setattr(ts0, attr, getattr(ts0, attr) + 1)
