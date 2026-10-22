@@ -52,7 +52,7 @@ export function LineupsPanel({ cfg, codes, stats, subLog, cards, goals }: Props)
             <g key={n.c + n.i} className="cursor-pointer" role="button" tabIndex={0} aria-label={`Stats for ${n.name}`}
               onClick={() => setPick({ open: true, name: n.name })} onKeyDown={(e) => { if (e.key === "Enter") setPick({ open: true, name: n.name }) }}>
               <circle cx={n.x} cy={n.y} r={2.9} fill={TEAM_COLORS[n.t]} stroke={n.i === 0 ? "#fbbf24" : "#fff"} strokeWidth={0.5} opacity={n.subbed ? 0.55 : 1} />
-              <text x={n.x} y={n.y + 1} textAnchor="middle" fontSize={2.7} fontWeight={800} fill="#04121c">{n.i + 1}</text>
+              <text x={n.x} y={n.y + 1} textAnchor="middle" fontSize={cfg.teams[n.c].numbers[n.i] > 9 ? 2.3 : 2.7} fontWeight={800} fill="#04121c">{cfg.teams[n.c].numbers[n.i]}</text>
               <text x={n.x} y={n.y + 5.6} textAnchor="middle" fontSize={n.compact ? 1.75 : 2.1} fontWeight={700} fill="#fff" stroke="#06150d" strokeWidth={0.45} paintOrder="stroke">{n.label}</text>
               {n.subbed && <g><circle cx={n.x + 2.7} cy={n.y - 2.3} r={1.3} fill="#e11d48" /><path d={`M ${n.x + 2.7} ${n.y - 3} L ${n.x + 2.7} ${n.y - 1.6} M ${n.x + 2.1} ${n.y - 2.2} L ${n.x + 2.7} ${n.y - 1.6} L ${n.x + 3.3} ${n.y - 2.2}`} stroke="#fff" strokeWidth={0.28} fill="none" /></g>}
               {n.booked && <rect x={n.x + n.label.length * (n.compact ? 0.48 : 0.58) + 0.9} y={n.y + 3.6} width={1.4} height={2} rx={0.25} fill="#facc15" stroke="#06150d" strokeWidth={0.2} />}

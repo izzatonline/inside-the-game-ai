@@ -46,7 +46,7 @@ def _pipeline(spec: MatchSpec, seed: int) -> MatchPipeline:
 
 
 def _roster(spec: MatchSpec):
-    return {c: {"name": v["name"], "color": v["color"], "players": [n for n, _ in v["players"]],
+    return {c: {"name": v["name"], "color": v["color"], "players": [n for n, _ in v["players"]], "numbers": v["numbers"],
                 "slots": [list(o) for o, _ in v["slots"]],
                 "formation": v["formation"], "lines": formation_lines(v["slots"], v["formation"]),
                 "staff": {"coach": v["staff"]["coach"], "assistants": v["staff"]["assistants"],
@@ -102,7 +102,7 @@ def index():
 @app.get("/api/matches")
 def matches():
     return [{"id": m.id, "title": m.title, "subtitle": m.subtitle, "blurb": m.blurb,
-             "duration_min": round(m.duration / 60), "scripted": m.scenario is not None,
+             "duration_min": round(m.duration / 60), "stadium": m.stadium, "scripted": m.scenario is not None,
              "teams": [{"code": c, "name": v["name"], "color": v["color"]} for c, v in m.teams.items()]} for m in MATCHES.values()]
 
 
@@ -112,7 +112,7 @@ def config(match: str = DEFAULT_MATCH):
         "llm": _llm.name, "orchestration": "agent-framework" if _runner else "plain",
         "languages": LANGUAGES,
         "match": {"id": _spec(match).id, "title": _spec(match).title, "subtitle": _spec(match).subtitle,
-                  "duration_min": round(_spec(match).duration / 60)},
+                  "duration_min": round(_spec(match).duration / 60), "stadium": _spec(match).stadium},
         "teams": _roster(_spec(match)), "referee": _spec(match).referee,
     }
 

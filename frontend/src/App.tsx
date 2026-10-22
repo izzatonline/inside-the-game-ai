@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Activity, ArrowUpDown, Box, ChevronDown, ChevronRight, ChevronUp, Info, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
+import { Activity, ArrowUpDown, Box, ChevronDown, ChevronRight, ChevronUp, Info, MapPin, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
 import { MomentCard } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { RolesLegend } from "@/components/RolesLegend"
@@ -21,7 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { useMatchStream } from "@/hooks/useMatchStream"
-import { fmtMinute } from "@/lib/format"
+import { fmtMinute, shirtNo } from "@/lib/format"
 import { useTheme } from "@/hooks/useTheme"
 import { describeBall } from "@/lib/ball"
 import { TEAM_COLORS, setTeamColors } from "@/lib/theme"
@@ -74,10 +74,10 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
   const [draft, setDraft] = useState(initial)
   const [applied, setApplied] = useState(initial)
   const [runId, setRunId] = useState(0)
-  const [startMin, setStartMin] = useState(0)
+  const [startMin, setStartMin] = useState(Number(params.get("start")) || 0)
   const [showEnd, setShowEnd] = useState(false)
   const [open, setOpen] = useState(false)
-  const [layers, setLayers] = useState(["shape", "control", "roles"])
+  const [layers, setLayers] = useState(["shape", "control", "roles", "offside"])
   const [focus, setFocus] = useState(window.innerWidth < 480 ? [codes[0]] : codes)
   const [selected, setSelected] = useState<Selected>(null)
   const [view3d, setView3d] = useState(params.get("view") !== "2d")
@@ -145,13 +145,14 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
           <Toggle pressed={view3d} onPressedChange={setView3d} variant="outline" size="sm" aria-label="3D view"><Box /> 3D</Toggle>
           <ToggleGroup multiple value={layers} onValueChange={setLayers} variant="outline" size="sm" spacing={1}>
             <ToggleGroupItem value="shape">Team shape</ToggleGroupItem><ToggleGroupItem value="control">Territory</ToggleGroupItem>
-            <ToggleGroupItem value="roles">Roles</ToggleGroupItem><ToggleGroupItem value="trail">Ball trail</ToggleGroupItem>
+            <ToggleGroupItem value="roles">Roles</ToggleGroupItem><ToggleGroupItem value="offside">Offside</ToggleGroupItem><ToggleGroupItem value="trail">Ball trail</ToggleGroupItem>
           </ToggleGroup>
           <ToggleGroup multiple value={focus} onValueChange={setFocus} variant="outline" size="sm" spacing={1}>
             {codes.map((c) => <ToggleGroupItem key={c} value={c}>{c}</ToggleGroupItem>)}
           </ToggleGroup>
           <Button variant="ghost" size="icon-sm" aria-label="What do the role badges mean?" title="What do the role badges mean?" onClick={() => setLegendOpen(true)}><Info /></Button>
         </div>
+        <div className="text-muted-foreground mt-1.5 flex items-center gap-1.5 text-xs"><MapPin className="size-3 shrink-0" /><span className="truncate"><b className="text-foreground">{cfg.match.stadium}</b> · {cfg.teams[codes[0]].name} (home)</span></div>
         <div className="text-muted-foreground mt-1.5 flex flex-wrap gap-x-4 text-xs">
           {shape.map(({ c, i, p }) => <span key={c} className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: TEAM_COLORS[i] }} /><b className="text-foreground">{p.formation}</b> {p.primary}</span>)}
         </div>
@@ -190,7 +191,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
             opacity: hidePitch ? 0 : 1, maxHeight: hidePitch ? 0 : pitchH, visibility: hidePitch ? "hidden" : "visible",
             transition: hidePitch ? "max-height .5s ease, opacity .4s ease, visibility 0s linear .5s" : "max-height .5s ease, opacity .4s ease, visibility 0s",
           } : undefined}>
-          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} benchSel={benchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
+          <PitchCanvas frames={frames} tactics={tactics} codes={codes} names={codes.map((c) => roster[c] ?? cfg.teams[c].players)} nums={codes.map((c) => (roster[c] ?? cfg.teams[c].players).map((nm, i) => shirtNo(cfg, c, nm) ?? cfg.teams[c].numbers[i]))} staff={codes.map((c) => cfg.teams[c].staff)} bench={bench} onBench={setBenchSel} benchSel={benchSel} layers={layers} focus={focus} selected={selected} onSelect={(x) => { setSelected(x); if (x) setBenchSel(null) }} view3d={view3d} />
           <Badge variant="secondary" className="absolute top-2 right-2 hidden sm:inline-flex">{state === "ended" ? "Full time" : state === "paused" ? "Paused" : `Playing · ${applied.speed}×`}</Badge>
           {view3d && <Badge variant="outline" className="bg-background/70 absolute top-2 right-2 text-[10px] backdrop-blur sm:top-9">Drag to rotate · double-tap to reset</Badge>}
           {toast && <div key={toast.id} className={`bg-background/90 animate-in fade-in slide-in-from-top-2 absolute top-2 left-1/2 max-w-[90%] -translate-x-1/2 rounded-xl border px-3 py-1.5 text-center backdrop-blur ${toast.goal ? "border-emerald-400" : ""}`}>

@@ -24,9 +24,9 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": 8.0, "width": 1.0, "press": 0.8, "long": 0.08},  # high line, press, short build-up
         "staff": {
             "coach": "Marco Villanueva", "assistants": ["Lena Voss", "Tariq Aziz"],
-            "subs": [("Pieter Jansen", "GK", 12), ("Ravi Menon", "DF", 13), ("Oskar Berg", "DF", 14),
-                     ("Hugo Marin", "MF", 15), ("Sione Tuilagi", "MF", 16), ("Amadou Keita", "MF", 17),
-                     ("Nico Valente", "FW", 18), ("Bruno Teles", "FW", 19), ("Jonas Eklund", "FW", 20)],
+            "subs": [("Pieter Jansen", "GK", 31), ("Ravi Menon", "DF", 15), ("Oskar Berg", "DF", 24),
+                     ("Hugo Marin", "MF", 16), ("Sione Tuilagi", "MF", 18), ("Amadou Keita", "MF", 21),
+                     ("Nico Valente", "FW", 19), ("Bruno Teles", "FW", 99), ("Jonas Eklund", "FW", 20)],
         },
         "players": [
             ("Adrian Wong", "GK"), ("Callum Draper", "DF"), ("Idris Okafor", "DF"),
@@ -34,6 +34,7 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
             ("Kofi Mensah", "MF"), ("Izzat Jamal", "MF"), ("Umayr Ziyad", "FW"),
             ("Wafi Shaik", "FW"), ("Tungtung Sahur", "FW"),
         ],
+        "numbers": [1, 2, 23, 4, 3, 6, 14, 8, 7, 9, 37],
         "slots": [  # 4-3-3: inverted RB, attacking LB, inside-forward RW
             ((5, 50), (14, 50)),
             ((28, 86), (48, 68)), ((22, 62), (30, 62)), ((22, 38), (30, 38)), ((30, 14), (64, 8)),
@@ -47,9 +48,9 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": -6.0, "width": 0.95, "press": 0.3, "long": 0.24},  # low block, direct counter
         "staff": {
             "coach": "Elena Rostova", "assistants": ["Gareth Pugh", "Imani Okoye"],
-            "subs": [("Davi Moreira", "GK", 12), ("Kasper Lund", "DF", 13), ("Yusuf Demir", "DF", 14),
-                     ("Felipe Rojas", "MF", 15), ("Anton Kovac", "MF", 16), ("Mateo Silva", "MF", 17),
-                     ("Isaac Boateng", "FW", 18), ("Leo Fontaine", "FW", 19), ("Ciaran Doyle", "FW", 20)],
+            "subs": [("Davi Moreira", "GK", 25), ("Kasper Lund", "DF", 13), ("Yusuf Demir", "DF", 15),
+                     ("Felipe Rojas", "MF", 22), ("Anton Kovac", "MF", 16), ("Mateo Silva", "MF", 20),
+                     ("Isaac Boateng", "FW", 18), ("Leo Fontaine", "FW", 29), ("Ciaran Doyle", "FW", 77)],
         },
         "players": [
             ("Elias Brandt", "GK"), ("Rui Carvalho", "DF"), ("Owen Maddox", "DF"),
@@ -57,6 +58,7 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
             ("Marcus Bell", "MF"), ("Arjun Nair", "MF"), ("Theo Lambert", "MF"),
             ("Diego Santoro", "MF"), ("Kwame Asante", "FW"),
         ],
+        "numbers": [1, 2, 4, 5, 3, 6, 8, 10, 7, 11, 19],
         "slots": [  # 4-2-3-1: double pivot, #10, inverted left winger
             ((5, 50), (14, 50)),
             ((26, 86), (46, 84)), ((20, 60), (28, 60)), ((20, 40), (28, 40)), ((26, 14), (46, 16)),
@@ -80,6 +82,7 @@ class MatchSpec:
     teams: Dict[str, Dict]
     duration: float = 5400.0
     scenario: Optional[Dict[str, Any]] = None
+    stadium: str = ""  # home ground (the first-listed team is the home side)
     referee: Dict[str, Any] = field(default_factory=lambda: {"name": "Sam Whitlock", "assistants": ["Pia Norland", "Gus Ferreira"], "var": "Lena Okonkwo"})
 
 
@@ -87,6 +90,7 @@ MATCHES: Dict[str, MatchSpec] = {}
 MATCHES["coastal"] = MatchSpec(
     "coastal", "Coastal Derby", "Seaview Park · 90 min", "Open game, shape battle: high press v low block",
     _COASTAL_TEAMS)
+MATCHES["coastal"].stadium = "Seaview Park"
 DEFAULT_MATCH = "coastal"
 TEAMS = MATCHES[DEFAULT_MATCH].teams  # default match, kept for existing callers
 
@@ -98,15 +102,16 @@ _RIVERSIDE_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": 10.0, "width": 1.05, "press": 0.9, "long": 0.05},  # dominant, high line, short passing
         "staff": {
             "coach": "Conrad Whitlock", "assistants": ["Bruno Esteves", "Yelena Marsh"],
-            "subs": [("Ben Hargrove", "GK", 12), ("Luis Mancera", "DF", 13), ("Niklas Aalto", "DF", 14),
-                     ("Oren Sasson", "MF", 15), ("Ruben Calvet", "MF", 16), ("Anil Prakash", "MF", 17),
-                     ("Theo Marquand", "FW", 18), ("Felix Lorenz", "FW", 19), ("Dmitri Kasim", "FW", 20)],
+            "subs": [("Ben Hargrove", "GK", 31), ("Luis Mancera", "DF", 12), ("Niklas Aalto", "DF", 15),
+                     ("Oren Sasson", "MF", 18), ("Ruben Calvet", "MF", 16), ("Anil Prakash", "MF", 21),
+                     ("Theo Marquand", "FW", 11), ("Felix Lorenz", "FW", 19), ("Dmitri Kasim", "FW", 99)],
         },
         "players": [
             ("Idris Calloway", "GK"), ("Tomas Varga", "DF"), ("Emeka Obi", "DF"), ("Rafael Quintero", "DF"),
             ("Soren Lindahl", "DF"), ("Kofi Danso", "MF"), ("Mattias Holm", "MF"), ("Dario Ferrucci", "MF"),
             ("Yusuf Karaca", "MF"), ("Jamie Rutherford", "MF"), ("Casper Wolfe", "FW"),
         ],
+        "numbers": [1, 2, 4, 5, 3, 6, 8, 10, 14, 7, 9],
         "slots": [  # 4-1-4-1
             ((5, 50), (16, 50)),
             ((30, 86), (52, 84)), ((24, 62), (34, 62)), ((24, 38), (34, 38)), ((30, 14), (52, 16)),
@@ -121,15 +126,16 @@ _RIVERSIDE_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": -12.0, "width": 1.0, "press": 0.25, "long": 0.32},  # deep five-man block, long counters
         "staff": {
             "coach": "Hamish Dunleavy", "assistants": ["Rory Quill", "Ines Barros"],
-            "subs": [("Oscar Fenwick", "GK", 12), ("Piers Garrow", "DF", 13), ("Linus Halloran", "DF", 14),
-                     ("Azim Rahal", "MF", 15), ("Abel Okoro", "MF", 16), ("Cormac Reyes", "MF", 17),
-                     ("Gideon Pryce", "FW", 18), ("Leo Marchetti", "FW", 19), ("Jory Bates", "FW", 20)],
+            "subs": [("Oscar Fenwick", "GK", 1), ("Piers Garrow", "DF", 12), ("Linus Halloran", "DF", 16),
+                     ("Azim Rahal", "MF", 17), ("Abel Okoro", "MF", 14), ("Cormac Reyes", "MF", 21),
+                     ("Gideon Pryce", "FW", 22), ("Leo Marchetti", "FW", 11), ("Jory Bates", "FW", 27)],
         },
         "players": [
             ("Walter Penhale", "GK"), ("Callum Ashby", "DF"), ("Isaac Thorne", "DF"), ("Marcus Bellweather", "DF"),
             ("Declan Rudd", "DF"), ("Ellis Cartmel", "DF"), ("Tobias Wren", "MF"), ("Nolan Pike", "MF"),
             ("Dominic Hale", "MF"), ("Harlan Voss", "MF"), ("Rory Blackwood", "FW"),
         ],
+        "numbers": [13, 2, 4, 5, 3, 15, 6, 8, 20, 10, 9],
         "slots": [  # 5-4-1
             ((5, 50), (12, 50)),
             ((26, 90), (46, 88)), ((20, 68), (26, 66)), ((18, 50), (24, 50)), ((20, 32), (26, 34)), ((26, 10), (46, 12)),
@@ -178,15 +184,16 @@ _REDCREST_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": 4.0, "width": 1.0, "press": 0.6, "long": 0.12},  # wing-backs, possession with width
         "staff": {
             "coach": "Ansel Whitcombe", "assistants": ["Ruta Kalnins", "Desmond Pryor"],
-            "subs": [("Tobias Lund", "GK", 12), ("Idan Barak", "DF", 13), ("Corin Ashdown", "DF", 14),
-                     ("Mateo Ibanez", "MF", 15), ("Kwesi Tetteh", "MF", 16), ("Rune Halvorsen", "MF", 17),
-                     ("Zane Okafor", "FW", 18), ("Felipe Marsh", "FW", 19), ("Hollis Crane", "FW", 20)],
+            "subs": [("Tobias Lund", "GK", 22), ("Idan Barak", "DF", 3), ("Corin Ashdown", "DF", 12),
+                     ("Mateo Ibanez", "MF", 15), ("Kwesi Tetteh", "MF", 16), ("Rune Halvorsen", "MF", 18),
+                     ("Zane Okafor", "FW", 11), ("Felipe Marsh", "FW", 19), ("Hollis Crane", "FW", 99)],
         },
         "players": [
             ("Hugo Mertens", "GK"), ("Callan Brooks", "DF"), ("Anselm Dreyer", "DF"), ("Rafe Holloway", "DF"),
             ("Mateus Duarte", "MF"), ("Kelvin Osei", "MF"), ("Joaquin Vidal", "MF"), ("Pascal Roux", "MF"),
             ("Teodor Falk", "MF"), ("Rhys Penmark", "MF"), ("Emil Sandoval", "FW"),
         ],
+        "numbers": [1, 2, 4, 5, 6, 8, 10, 14, 7, 17, 9],
         "slots": [  # 3-4-2-1
             ((5, 50), (14, 50)),
             ((22, 70), (30, 70)), ((20, 50), (28, 50)), ((22, 30), (30, 30)),
@@ -201,15 +208,16 @@ _REDCREST_TEAMS: Dict[str, Dict] = {
         "tactic": {"line": -6.0, "width": 1.0, "press": 0.35, "long": 0.22},  # compact 4-4-2, quick breaks
         "staff": {
             "coach": "Gavin Harrowgate", "assistants": ["Pia Santoro", "Neil Tranter"],
-            "subs": [("Cass Dunmore", "GK", 12), ("Elliott Rae", "DF", 13), ("Marek Zielinski", "DF", 14),
-                     ("Dev Anand", "MF", 15), ("Louis Perrault", "MF", 16), ("Gabe Sinclair", "MF", 17),
-                     ("Wes Calloway", "FW", 18), ("Ike Nwosu", "FW", 19), ("Bram Voorhees", "FW", 20)],
+            "subs": [("Cass Dunmore", "GK", 1), ("Elliott Rae", "DF", 12), ("Marek Zielinski", "DF", 14),
+                     ("Dev Anand", "MF", 15), ("Louis Perrault", "MF", 16), ("Gabe Sinclair", "MF", 21),
+                     ("Wes Calloway", "FW", 17), ("Ike Nwosu", "FW", 19), ("Bram Voorhees", "FW", 88)],
         },
         "players": [
             ("Ivor Teasdale", "GK"), ("Cormac Leighton", "DF"), ("Lucan Marsh", "DF"), ("Dorian Ashcroft", "DF"),
             ("Evan Hartley", "DF"), ("Nasir Bello", "MF"), ("Tomasz Wrobel", "MF"), ("Jarek Lindgren", "MF"),
             ("Pablo Ibarra", "MF"), ("Corbin Vale", "FW"), ("Emerson Lyle", "FW"),
         ],
+        "numbers": [30, 2, 3, 4, 5, 6, 8, 10, 7, 9, 11],
         "slots": [  # 4-4-2
             ((5, 50), (12, 50)),
             ((28, 86), (44, 84)), ((20, 62), (26, 62)), ((20, 38), (26, 38)), ((28, 14), (44, 16)),
@@ -386,6 +394,10 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                                      slot_of(poss_, taker) if taker else None)
         if ph == "kickoff" or t_ == 0.0:  # restarts from the centre: teams start in their own halves
             pos = _kickoff_shape(pos, codes.index(poss_), info["carrier"])
+        elif ph in ("throw_in", "corner"):  # the taker stands just outside the line, the ball sits on it
+            k = codes.index(poss_) * 11 + info["carrier"]
+            pos[k] = ([bx, -2.0 if by < 50 else 102.0] if ph == "throw_in"
+                      else [bx + (1.6 if bx > 50 else -1.6), by + (-2.0 if by < 50 else 2.0)])
         occluded = (math.sin(t_ * 12.9898) * 43758.5453) % 1.0 < 0.18
         if loose:
             holder, conf = None, 0.0
@@ -505,7 +517,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                 ph = "kickoff"
             elif outcome == "blocked" and len(events) % 2 == 0:
                 # deflected behind: the attackers keep the ball for a corner (touch not certain)
-                poss, x, y = shooter_team, 97.0, (4.0 if (len(events) // 2) % 2 else 96.0)
+                poss, x, y = shooter_team, 100.0, (0.0 if (len(events) // 2) % 2 else 100.0)  # in the corner
                 emit(t, "restart", poss, "", x, y, kind="corner")
                 ph, phc = "corner", 0.62
             else:
@@ -550,7 +562,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             if ok:
                 x, y = nx, ny
             elif ny < 7 or ny > 93:  # ran out over the touchline: throw-in to the other side
-                poss, x, y = opp, 100 - nx, (97.0 if ny < 50 else 3.0)
+                poss, x, y = opp, 100 - nx, (100.0 if ny < 50 else 0.0)  # on the touchline
                 emit(t, "possession_change", poss, "", x, y, cause="out_of_play")
                 emit(t, "restart", poss, "", x, y, kind="throw_in")
                 ph, phc = "throw_in", 0.92
@@ -594,3 +606,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+MATCHES["riverside"].stadium = "Riverside Arena"
+MATCHES["redcrest"].stadium = "Redcrest Park"
