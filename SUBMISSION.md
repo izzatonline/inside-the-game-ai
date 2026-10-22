@@ -22,18 +22,22 @@ Tech: Microsoft Agent Framework, Microsoft Foundry (gpt-5-mini deployment), GitH
 Not used / not verified (do NOT list): Azure Event Hubs, Azure Container Apps (drafts exist in `infra/`).
 Video auto-eventing: only a prototype (tracks players in synthetic footage; no pass/shot detection from video). If mentioned, say "early prototype", never as a finished feature.
 
-## Demo video script (target 1:45, screen recording + voiceover, no music, no logos)
+## Demo video script (target 1:50, screen recording + voiceover, no music, no logos)
+
+Match: **Redcrest Rain Night** (goal at 29', then 42', 61', 68', 82'). Desktop browser, ~1440x900, server started with `./run.sh` (Foundry on).
+Before recording: play the match once in **Casual/English** and once in **Analyst/Spanish** at 300x, so the AI wording is cached and appears instantly (it is shared per match, language and mode).
 
 | Time | On screen | Say |
 |---|---|---|
-| 0:00-0:10 | UI, Kick off at 60x | "Football stories don't end at the scoreline. Inside the Game explains the match as it happens." |
-| 0:10-0:30 | Casual mode, goal overlay appears | "Same synthetic match, casual mode: a goal, in plain words, with the score." |
-| 0:30-0:55 | Switch to Analyst + Spanish; goal overlay shows xG, shot speed, pressure chips and the 'why' line | "Analyst mode in Spanish: xG, shot speed, and *why it matters*: this team had 92% of the pressure, so the goal rewards control." |
-| 0:55-1:10 | Player focus + metric = speed; sprint overlays; open JSON panel | "Player focus or a single metric. Every overlay is timed, machine-readable JSON for a broadcast renderer." |
-| 1:10-1:35 | Terminal: `python -m itg.demo` | "Agents hand off: explainer, narrator, fact-checker on Agent Framework. Here the model hallucinates numbers; the fact-checker rejects them and falls back to grounded text." |
-| 1:35-1:45 | Recap panel, then architecture diagram from README | "Full-time recap, powered by Foundry with grounded fallbacks. Inside the Game." |
+| 0:00-0:12 | App open on Redcrest, 3D pitch, kick off at 60x | "Football stories don't end at the scoreline. Inside the Game turns synthetic match events into explainable intelligence, live." |
+| 0:12-0:30 | Casual mode: goal at 29' (use timeline "Jump to 29'"), toast + card | "A synthetic match, casual mode: the goal in plain words, the score, and the pitch shows the shape of both teams." |
+| 0:30-0:50 | Gear: Analyst + Spanish, Apply; timeline, jump to 42'; goal card with xG, speed, pressure chips and the why line | "Same match, analyst mode in Spanish: xG, shot speed, and why it matters. Favourite club and player focus work the same way." |
+| 0:50-1:15 | Tap "AI · fact-checked" on the card: How this was made. Then flip AI narration Off in Settings (3 s) and back | "Code spots the moment and calculates every number. A gpt-5-mini model on Microsoft Foundry writes the words. A fact-checker rejects any number not in the facts, and falls back to grounded text, so it never breaks." |
+| 1:15-1:35 | Tactics tab (formation, line height, roles), then Line-ups tab | "Agents on Microsoft Agent Framework also read shape: formation, pressing, player roles, line-ups and substitutions." |
+| 1:35-1:50 | Jump to full time: end card, recap, match report | "A full-time recap and match report, all from synthetic data. Inside the Game." |
 
-Record at 1080p; trim to < 2:00 (judges stop at 2:00). Say "synthetic data" once. Don't show real club logos/kits.
+Record at 1080p; trim to < 2:00 (judges stop at 2:00). Say "synthetic data" once. No real club logos or kits (none in the app). If you dislike voiceover, use large English captions instead.
+Recording tips: macOS Cmd+Shift+5 (record selected window), hide the bookmarks bar, close other tabs, Do Not Disturb on, 100% zoom. Upload to YouTube as Unlisted or Public and check it plays logged-out.
 
 ## Pre-submission checklist
 
