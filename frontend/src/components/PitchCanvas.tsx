@@ -356,7 +356,7 @@ export function PitchCanvas(props: Props) {
           }
         })
         // coaching staff stand on the technical-area line; the head coach shadows the ball along the touchline
-        const target = x0 + 16 + (x1 - x0 - 32) * (fr.ball[0] / 100)
+        const target = (x0 + x1) / 2 + (fr.ball[0] / 100 - 0.5) * (x1 - x0) * 0.14  // stays inside the technical area
         coachX[t] = coachX[t] < 0 ? target : coachX[t] + (target - coachX[t]) * 0.06
         const cy = top + strip * 0.3, lift = bounce(fr, codes[t])
         st.assistants.forEach((nm, k) => {
@@ -407,7 +407,7 @@ export function PitchCanvas(props: Props) {
             benchHeads.push({ x: h[0], y: h[1], r: h[2] + 3, pick: { team: t, name: sb.name, role: subRole(st, i, used ? "used" : "seat") } })
           }
         })
-        const target = xc - half + 3 + (2 * half - 6) * (fr.ball[0] / 100)
+        const target = xc + (fr.ball[0] / 100 - 0.5) * 6  // a few steps either side of the dugout centre
         coachX[t] = coachX[t] < 0 ? target : coachX[t] + (target - coachX[t]) * 0.06
         const lift = bounce(fr, codes[t]) * 0.35
         const ch = stand3(coachX[t], -35.6, 3.6 + lift, psi, "#0f172a", "#fbbf24", "HC", "#fbbf24", 1, 1.15)
