@@ -40,10 +40,10 @@ export type BenchState = Record<string, { warming: number[]; used: number[] }>
 export type BenchPick = { team: number; name: string; role: string } | null
 export type Config = {
   llm: string; orchestration: string; languages: Record<string, string>; match: { id: string; title: string; subtitle: string; duration_min: number }
-  teams: Record<string, { name: string; players: string[]; slots: number[][]; formation: string; lines: number[][]; staff: Staff }>
+  teams: Record<string, { name: string; color: string; players: string[]; slots: number[][]; formation: string; lines: number[][]; staff: Staff }>
   referee: { name: string; assistants: string[]; var: string }
 }
-export type MatchInfo = { id: string; title: string; subtitle: string; blurb: string; duration_min: number; scripted: boolean; teams: { code: string; name: string }[] }
+export type MatchInfo = { id: string; title: string; subtitle: string; blurb: string; duration_min: number; scripted: boolean; teams: { code: string; name: string; color: string }[] }
 export type Settings = {
   match: string; mode: string; lang: string; team: string; player: string; metric: string; src: string; speed: string; seed: string; ai: string
 }

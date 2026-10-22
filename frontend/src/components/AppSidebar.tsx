@@ -4,7 +4,6 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail,
 } from "@/components/ui/sidebar"
 import type { ThemeMode } from "@/hooks/useTheme"
-import { TEAM_COLORS } from "@/lib/theme"
 import type { MatchInfo } from "@/lib/types"
 
 type Props = { matches: MatchInfo[]; matchId: string; onSelect: (id: string) => void; theme: ThemeMode; onTheme: (m: ThemeMode) => void }
@@ -34,8 +33,8 @@ export function AppSidebar({ matches, matchId, onSelect, theme, onTheme }: Props
                 <SidebarMenuItem key={m.id}>
                   <SidebarMenuButton size="lg" isActive={m.id === matchId} tooltip={`${m.title}: ${m.teams[0].name} v ${m.teams[1].name}`} onClick={() => onSelect(m.id)} className="h-auto items-start py-2">
                     <span className="mt-1 flex shrink-0 -space-x-1.5">
-                      <span className="size-3.5 rounded-full ring-2 ring-sidebar" style={{ background: TEAM_COLORS[0] }} />
-                      <span className="size-3.5 rounded-full ring-2 ring-sidebar" style={{ background: TEAM_COLORS[1] }} />
+                      <span className="size-3.5 rounded-full ring-2 ring-sidebar" style={{ background: m.teams[0].color }} />
+                      <span className="size-3.5 rounded-full ring-2 ring-sidebar" style={{ background: m.teams[1].color }} />
                     </span>
                     <span className="grid min-w-0 flex-1 text-left leading-snug">
                       <span className="truncate text-sm font-semibold">{m.title}</span>

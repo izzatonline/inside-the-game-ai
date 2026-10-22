@@ -24,7 +24,7 @@ import { useMatchStream } from "@/hooks/useMatchStream"
 import { fmtMinute } from "@/lib/format"
 import { useTheme } from "@/hooks/useTheme"
 import { describeBall } from "@/lib/ball"
-import { TEAM_COLORS } from "@/lib/theme"
+import { TEAM_COLORS, setTeamColors } from "@/lib/theme"
 import type { BenchPick, Config, MatchInfo, Selected, Settings } from "@/lib/types"
 
 const params = new URLSearchParams(location.search)
@@ -56,7 +56,7 @@ export default function App() {
   useEffect(() => {
     if (!matchId) return
     setCfg(null)
-    fetch(`/api/config?match=${matchId}`).then((r) => r.json()).then(setCfg)
+    fetch(`/api/config?match=${matchId}`).then((r) => r.json()).then((c: Config) => { const t = Object.values(c.teams); setTeamColors(t[0].color, t[1].color); setCfg(c) })
   }, [matchId])
   if (!matches || !cfg) return <div className="space-y-3 p-4"><Skeleton className="h-14 w-full" /><Skeleton className="aspect-[105/77.5] w-full" /></div>
   return (
@@ -177,7 +177,7 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
           <Button variant="outline" size="icon-lg" aria-label="Settings" onClick={() => setOpen(true)}><SettingsIcon /></Button>
         </div>
         <div className="my-2">
-          <div className="h-1 overflow-hidden rounded bg-rose-500"><div className="h-full bg-sky-400 transition-all duration-500" style={{ width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
+          <div className="h-1 overflow-hidden rounded" style={{ background: TEAM_COLORS[1] }}><div className="h-full transition-all duration-500" style={{ background: TEAM_COLORS[0], width: `${50 + 50 * (stats?.momentum ?? 0)}%` }} /></div>
         </div>
         {hint && canJump && (
           <button onClick={dismissHint} className="bg-foreground text-background animate-in fade-in slide-in-from-top-1 absolute top-full left-1/2 z-40 mt-0.5 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-medium whitespace-nowrap shadow-lg">

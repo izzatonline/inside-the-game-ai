@@ -138,8 +138,8 @@
 }
 
 /* team colours for text: darker on light backgrounds for contrast */
-:root { --team-0: #0e7490; --team-1: #be123c; }
-.dark { --team-0: #38bdf8; --team-1: #fb7185; --minute: #fbbf24; }
+:root { --team-0: color-mix(in oklab, var(--team-0-b, #38bdf8) 60%, black); --team-1: color-mix(in oklab, var(--team-1-b, #f43f5e) 60%, black); }
+.dark { --team-0: var(--team-0-b, #38bdf8); --team-1: var(--team-1-b, #f43f5e); --minute: #fbbf24; }
 
 /* Light mode: clean white with soft card shadows */
 :root:not(.dark) body {

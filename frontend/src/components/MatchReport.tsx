@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react"
 import { Lock } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TEAM_COLORS } from "@/lib/theme"
+import { TEAM_COLORS, teamRgb } from "@/lib/theme"
 import type { Recap } from "@/lib/types"
 
-const RGB = [[56, 189, 248], [244, 63, 94]]
 
 /** Smooth territory map: blue where the home side operated more, rose where the away side did. */
 function TerritoryMap({ heat }: { heat: Recap["report"]["heat"] }) {
@@ -21,7 +20,7 @@ function TerritoryMap({ heat }: { heat: Recap["report"]["heat"] }) {
     let k = 0
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const gx = (x / W) * heat.cols - 0.5, gy = (y / H) * heat.rows - 0.5
-      const v = bil(heat.v, gx, gy), w = bil(heat.w, gx, gy), col = RGB[v >= 0 ? 0 : 1]
+      const v = bil(heat.v, gx, gy), w = bil(heat.w, gx, gy), col = [teamRgb(0), teamRgb(1)][v >= 0 ? 0 : 1]
       img.data[k++] = col[0]; img.data[k++] = col[1]; img.data[k++] = col[2]; img.data[k++] = Math.min(1, Math.abs(v) * 2.4) * (0.3 + 0.7 * w) * 240
     }
     g.putImageData(img, 0, 0)

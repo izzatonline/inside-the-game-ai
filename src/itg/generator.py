@@ -19,7 +19,7 @@ from .models import Event
 # the tactics analyzer must infer them from positions alone.
 _COASTAL_TEAMS: Dict[str, Dict] = {
     "NOR": {
-        "name": "Northbridge FC",
+        "name": "Northbridge FC", "color": "#38bdf8",
         "formation": "4-3-3",
         "tactic": {"line": 8.0, "width": 1.0, "press": 0.8, "long": 0.08},  # high line, press, short build-up
         "staff": {
@@ -42,7 +42,7 @@ _COASTAL_TEAMS: Dict[str, Dict] = {
         ],
     },
     "HAR": {
-        "name": "Harbor City",
+        "name": "Harbor City", "color": "#f43f5e",
         "formation": "4-2-3-1",
         "tactic": {"line": -6.0, "width": 0.95, "press": 0.3, "long": 0.24},  # low block, direct counter
         "staff": {
@@ -93,7 +93,7 @@ TEAMS = MATCHES[DEFAULT_MATCH].teams  # default match, kept for existing callers
 
 _RIVERSIDE_TEAMS: Dict[str, Dict] = {
     "MER": {
-        "name": "Meridian FC",
+        "name": "Meridian FC", "color": "#a78bfa",
         "formation": "4-1-4-1",
         "tactic": {"line": 10.0, "width": 1.05, "press": 0.9, "long": 0.05},  # dominant, high line, short passing
         "staff": {
@@ -116,7 +116,7 @@ _RIVERSIDE_TEAMS: Dict[str, Dict] = {
         ],
     },
     "TID": {
-        "name": "Tidewater Town",
+        "name": "Tidewater Town", "color": "#fbbf24",
         "formation": "5-4-1",
         "tactic": {"line": -12.0, "width": 1.0, "press": 0.25, "long": 0.32},  # deep five-man block, long counters
         "staff": {
@@ -173,7 +173,7 @@ MATCHES["riverside"] = MatchSpec(
 
 _REDCREST_TEAMS: Dict[str, Dict] = {
     "RED": {
-        "name": "Redcrest United",
+        "name": "Redcrest United", "color": "#ef4444",
         "formation": "3-4-2-1",
         "tactic": {"line": 4.0, "width": 1.0, "press": 0.6, "long": 0.12},  # wing-backs, possession with width
         "staff": {
@@ -196,7 +196,7 @@ _REDCREST_TEAMS: Dict[str, Dict] = {
         ],
     },
     "KES": {
-        "name": "Kestrel Town",
+        "name": "Kestrel Town", "color": "#2dd4bf",
         "formation": "4-4-2",
         "tactic": {"line": -6.0, "width": 1.0, "press": 0.35, "long": 0.22},  # compact 4-4-2, quick breaks
         "staff": {

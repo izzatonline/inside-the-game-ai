@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import type { BenchPick, BenchState, Frames, Selected, Staff, TacticsMap } from "@/lib/types"
-import { BADGE_COLORS, TEAM_COLORS } from "@/lib/theme"
+import { BADGE_COLORS, TEAM_COLORS, teamRgb } from "@/lib/theme"
 import { isDeadBall, lastName, phaseLabel } from "@/lib/ball"
 
 type Props = {
@@ -75,7 +75,7 @@ export function PitchCanvas(props: Props) {
           const dx = (px - pos[n][0]) * 1.05, dy = (py - pos[n][1]) * 0.68, w = Math.exp(-(dx * dx + dy * dy) / s2)
           if (n < 11) a += w; else b += w
         }
-        const v = (a - b) / (a + b + 0.02), cov = Math.min(1, (a + b) * 1.1), col = v > 0 ? [56, 189, 248] : [244, 63, 94]
+        const v = (a - b) / (a + b + 0.02), cov = Math.min(1, (a + b) * 1.1), col = v > 0 ? teamRgb(0) : teamRgb(1)
         img.data[k++] = col[0]; img.data[k++] = col[1]; img.data[k++] = col[2]; img.data[k++] = Math.abs(v) * cov * 120
       }
       cg.putImageData(img, 0, 0)
@@ -239,7 +239,7 @@ export function PitchCanvas(props: Props) {
             const v = (val[j][i] + val[j][i + 1] + val[j + 1][i] + val[j + 1][i + 1]) / 4, al = Math.min(0.6, Math.abs(v) * 0.75)
             if (al < 0.05) continue
             const P = (ci: number, cj: number) => { const w = w3((ci / NX) * 100, (cj / NY) * 100); return project(w[0], w[1], Math.max(0, hgt[cj][ci]) * (hgt[cj][ci] > 0 ? 1 : 0.35) , psi) }
-            poly([P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)], v > 0 ? `rgba(56,189,248,${al})` : `rgba(244,63,94,${al})`)
+            poly([P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1)], `rgba(${teamRgb(v > 0 ? 0 : 1).join(",")},${al})`)
           }
         }
         // hulls on the ground
