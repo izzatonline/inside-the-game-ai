@@ -329,20 +329,29 @@ def test_match_report_is_built_from_events():
 
 
 def test_nobody_camps_in_an_offside_position():
-    """IFAB Law 11: nearer the goal line than both the ball and the second-last opponent, in the opponents' half."""
-    checked = 0
+    """IFAB Law 11: nearer the goal line than both the ball and the second-last opponent, in the opponents' half.
+    With real movement an attacker can be caught there for a moment, but never stays (at most 6 s in a row)."""
+    checked, longest = 0, 0
     for match in ("coastal", "riverside", "redcrest"):
         for seed in (1, 3, 7):
+            since = {}
             for e in generate_match(seed, match=match):
-                if e.type != "tracking" or e.meta["phase"] in ("kickoff", "corner"):
+                if e.type != "tracking":
+                    continue
+                if e.meta["phase"] != "open":
+                    since = {}
                     continue
                 p, bx = e.meta["pos"], e.meta["ball"][0]
                 lim0 = max(50, bx, sorted((q[0] for q in p[11:]), reverse=True)[1])
                 lim1 = min(50, bx, sorted(q[0] for q in p[:11])[1])
-                assert all(q[0] <= lim0 + 0.5 for q in p[1:11])
-                assert all(q[0] >= lim1 - 0.5 for q in p[12:])
+                for i in list(range(1, 11)) + list(range(12, 22)):
+                    if (p[i][0] > lim0 + 0.5) if i < 11 else (p[i][0] < lim1 - 0.5):
+                        since.setdefault(i, e.t)
+                        longest = max(longest, e.t - since[i])
+                    else:
+                        since.pop(i, None)
                 checked += 1
-    assert checked > 1000
+    assert checked > 10000 and longest <= 6
 
 
 def test_corner_kick_shapes():
@@ -407,4 +416,124 @@ def test_penalty_everyone_outside_the_area_and_arc():
             assert not in_area and _m(q, ball) >= 9.15
         assert abs(dfn[0][0] - end) < 1  # keeper on the line
         seen += 1
-    assert seen == 3
+    assert seen >= 3
+
+
+def test_movement_is_one_second_and_humanly_possible():
+    frames = [e for e in generate_match(7, match="redcrest") if e.type == "tracking"]
+    gaps = [b.t - a.t for a, b in zip(frames, frames[1:])]
+    assert sum(g <= 1.05 for g in gaps) / len(gaps) > 0.95  # about one frame per second
+    speeds = [_m(p, q) / (b.t - a.t) for a, b in zip(frames, frames[1:]) if b.meta["phase"] == a.meta["phase"] == "open"
+              and 0.9 <= b.t - a.t <= 1.1 for p, q in zip(a.meta["pos"], b.meta["pos"])]
+    assert sum(v <= 9.5 for v in speeds) / len(speeds) > 0.999  # top speeds stay human (about 34 km/h)
+
+
+def test_event_names_follow_the_positions():
+    from itg.generator import MATCHES
+
+    ev = generate_match(7)
+    roster = {c: [n for n, _ in v["players"]] for c, v in MATCHES["coastal"].teams.items()}
+    ok = tot = 0
+    for i, e in enumerate(ev):
+        if e.t > 45 * 60:
+            break  # before substitutions change the line-ups
+        if e.type == "pass" and e.outcome == "complete":
+            fr = next(f for f in ev[i:] if f.type == "tracking")
+            if fr.meta["holder"]:
+                tot += 1
+                ok += roster[fr.meta["holder"][0]][fr.meta["holder"][1]] == e.meta["receiver"]
+    assert tot > 100 and ok / tot > 0.95
+
+
+def test_offsides_come_from_the_geometry():
+    offs = [e for match in ("coastal", "redcrest") for e in generate_match(7, match=match) if e.type == "offside"]
+    assert offs and all("line_x" in e.meta for e in offs)
+
+
+def test_restart_watch_times_restarts_against_handbook_limits():
+    from itg.generator import MATCHES, RESTART_LIMITS
+    from itg.state import MatchState
+
+    assert RESTART_LIMITS == {"throw_in": 5.0, "goal_kick": 5.0, "keeper_hold": 8.0}  # PL handbook 2026/27
+    spec = MATCHES["redcrest"]
+    st = MatchState({c: v["name"] for c, v in spec.teams.items()}, {c: [n for n, _ in v["players"]] for c, v in spec.teams.items()})
+    kinds = []
+    for e in generate_match(7, match="redcrest"):
+        kinds += [m.kind for m in st.ingest(e)]
+    rw = st.snapshot()["restart_watch"]
+    assert {"throw_in", "goal_kick"} <= {k for team in rw.values() for k in team}
+    assert all(w["avg"] <= w["longest"] and w["over"] <= w["n"] for team in rw.values() for w in team.values())
+    assert any(k.startswith("restart_late_") for k in kinds)
+    players = st.snapshot()["players"]
+    assert max(p["distance_km"] for p in players.values()) > 8 and max(p["top_speed"] for p in players.values()) <= 35
+
+
+def _first_goal(seed=3):
+    from itg.state import MatchState
+
+    st = MatchState(NAMES, {c: [n for n, _ in v["players"]] for c, v in TEAMS.items()})
+    return next(m for e in generate_match(seed) for m in st.ingest(e) if m.kind == "goal")
+
+
+def test_factchecker_sends_drafts_back_and_the_fixed_draft_airs():
+    from itg.agents import ExplainerAgent, NarratorAgent, Newsroom
+    from itg.demo import HallucinatingLLM, LearningLLM
+    from itg.maf import MafRunner
+
+    goal = _first_goal()
+    for llm in (LearningLLM(), HallucinatingLLM()):
+        plain = Newsroom(ExplainerAgent(llm), NarratorAgent(llm)).run(goal, Profile(mode="analyst"))
+        flow = MafRunner(llm).run(goal, Profile(mode="analyst"))
+        for job in (plain, flow):
+            sent_back = [s for s in job.trace if s["agent"] == "FactChecker" and "sent" in s["action"]]
+            assert sent_back and job.trace[-1]["agent"] == "Editor" and job.verified
+            assert FactChecker().run(f"{job.headline} {job.body} {job.why}", goal.facts)  # nothing ungrounded airs
+        if isinstance(llm, LearningLLM):
+            assert plain.source == flow.source == "llm" and plain.headline == flow.headline  # fixed on the rewrite
+        else:
+            assert plain.source == flow.source == "template" and len(sent_back) == 4  # 2 rewrites per part, then template
+
+
+def test_model_failure_is_retried_once_then_falls_back():
+    from itg.agents import ExplainerAgent, NarratorAgent, Newsroom
+
+    class Flaky:
+        name, available, calls = "flaky", True, 0
+
+        def complete(self, system, user, max_tokens=250):
+            self.calls += 1
+            if self.calls % 2:
+                return None  # every first call fails
+            return '{"headline": "Goal", "body": "What a finish."}' if "JSON" in system else "It changes the game."
+
+    job = Newsroom(ExplainerAgent(Flaky()), NarratorAgent(Flaky())).run(_first_goal(), Profile())
+    assert job.source == "llm" and any(s["note"] == "model retried once" for s in job.trace)
+
+
+def test_meaning_check_sends_wrong_goal_headlines_back():
+    import json as _json
+
+    from itg.agents import ExplainerAgent, NarratorAgent, Newsroom, meaning_problems
+    from itg.models import Moment
+
+    m = Moment("g", "goal", 0, 82, "RED", "Lucan Marsh", 1.0,
+               {"score_home": 2, "score_away": 1, "own_goal": True, "scoring_team": "Redcrest United", "player_team": "Kestrel Town"})
+    assert meaning_problems(m, "en", "Own Goal Shakes Things Up", "Lucan Marsh (Redcrest United) scores an own goal.")
+    assert not meaning_problems(m, "en", "Marsh own goal", "Kestrel's Lucan Marsh turns it into his own net.")
+    goal = _first_goal()
+
+    class MissThenGoal:  # first caption calls the goal a chance; after feedback it says goal
+        name, available = "fake", True
+
+        def complete(self, system, user, max_tokens=250):
+            p = _json.loads(user)
+            if "JSON" not in system:
+                return "It changes the game."
+            if "rejected_draft" in p:
+                assert p["rejected_draft"]["meaning_problems"]
+                return _json.dumps({"headline": f"Goal for {p['facts']['team_name']}", "body": f"{p['facts']['player']} scores."})
+            return _json.dumps({"headline": "Big chance!", "body": f"{p['facts']['player']} shoots."})
+
+    job = Newsroom(ExplainerAgent(MissThenGoal()), NarratorAgent(MissThenGoal())).run(goal, Profile())
+    assert job.source == "llm" and job.headline.startswith("Goal")
+    assert any("miss or a chance" in s["note"] for s in job.trace)

@@ -4,6 +4,7 @@
 """
 import argparse
 import asyncio
+import json
 
 from .generator import TEAMS, generate_match
 from .llm import get_llm
@@ -32,6 +33,24 @@ class HallucinatingLLM:
         return out
 
 
+class LearningLLM:
+    """Invents a number on the first draft, then fixes it when the FactChecker sends it back with feedback."""
+    name, available = "learning", True
+
+    def complete(self, system, user, max_tokens=250):
+        payload = json.loads(user)
+        f = payload["facts"]
+        if "rejected_draft" not in payload:
+            out = ('{"headline": "Wonder goal", "body": "A 142 km/h rocket!"}' if "JSON" in system
+                   else "The biggest comeback since 1987.")
+        elif "JSON" in system:
+            out = json.dumps({"headline": f"Goal for {f['team_name']}", "body": f"{f['player']} scores: {f['scoreline']}."})
+        else:
+            out = f"{f['team_name']} had {f['pressure_pct']}% of the pressure, and it told."
+        print(f"  [model said] {out}")
+        return out
+
+
 async def trace(runner: MafRunner, job: Job, label: str) -> None:
     print(f"\n=== {label} ===")
     result = await runner._workflow().run(job)
@@ -39,6 +58,8 @@ async def trace(runner: MafRunner, job: Job, label: str) -> None:
         if ev.type in ("executor_invoked", "executor_completed"):
             print(f"  {ev.type:<19} {ev.executor_id}")
     out = result.get_outputs()[0]
+    for step in out.trace:
+        print(f"  {'ok ' if step['ok'] else 'NO '} {step['agent']:<11} {step['action']}" + (f" ({step['note']})" if step["note"] else ""))
     print(f"  -> source={out.source} verified={out.verified}")
     print(f"  headline: {out.headline}\n  body:     {out.body}\n  why:      {out.why}")
 
@@ -51,7 +72,9 @@ async def main(seed: int) -> None:
     await trace(MafRunner(get_llm()), Job(goal, profile), "1. Normal run (configured backend)")
     await trace(MafRunner(DownLLM()), Job(goal, profile), "2. Model outage -> template fallback")
     await trace(MafRunner(HallucinatingLLM()), Job(goal, profile),
-                "3. Hallucinated numbers -> rejected, grounded fallback")
+                "3. Keeps inventing numbers -> two rewrites refused, grounded template")
+    await trace(MafRunner(LearningLLM()), Job(goal, profile),
+                "4. Invents a number, then fixes it after the FactChecker's feedback -> AI text airs")
 
 
 if __name__ == "__main__":

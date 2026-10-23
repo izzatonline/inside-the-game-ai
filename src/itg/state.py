@@ -1,6 +1,7 @@
 """Interpret stage: fold raw events into football state and detect explainable moments."""
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Tuple
@@ -17,6 +18,7 @@ def minute_label(m: int) -> str:
 WINDOW_S = 300.0  # rolling window for pressure / momentum
 SPRINT_KMH = 33.0
 HIGH_SPEED_KMH = 27.0
+MAX_RUN_MS = 9.5  # faster than this between two frames is a jump in the data, not running
 SWING_SHARE = 0.70  # pressure share needed to call a momentum swing
 MIN_WINDOW_WEIGHT = 8.0
 
@@ -64,6 +66,8 @@ class PlayerStats:
     pressures: int = 0
     on_target: int = 0
     assists: int = 0
+    distance_m: float = 0.0  # from 1-second tracking
+    fast: bool = False  # currently above HIGH_SPEED_KMH (a run is counted once, when it starts)
 
 
 RESTART_CONFIRM_S = 10.0  # a restart event confirms frames of the same restart this many seconds after it
@@ -83,6 +87,8 @@ class MatchState:
         self._cooldown: Dict[str, float] = {}
         self._n = 0
         self.report_builder = MatchReportBuilder(self.codes)
+        self._last_frame: Optional[Tuple[float, List[List[float]], str]] = None
+        self.restart_watch: Dict[str, Dict[str, Dict[str, float]]] = {}  # team -> kind -> n, over, total, longest
         self.last_restart: Optional[Tuple[float, str, str]] = None  # (t, team, kind) of the latest official restart
         self.goal_log: List[Dict[str, Any]] = []
         self.card_log: List[Dict[str, Any]] = []
@@ -142,11 +148,50 @@ class MatchState:
             return max(conf, 0.97)
         return conf
 
+    def _restart_watch(self, ev: Event) -> List[Moment]:
+        """Restart Watch: how long each throw-in, goal kick and keeper hold took, against the Premier League
+        2026/27 handbook limits (throw-in and goal kick 5 s, keeper 8 s). Neutral: it reports, it does not judge."""
+        kind, secs, limit = ev.meta["kind"], ev.meta["secs"], ev.meta["limit"]
+        w = self.restart_watch.setdefault(ev.team, {}).setdefault(kind, {"n": 0, "over": 0, "total": 0.0, "longest": 0.0})
+        w["n"] += 1
+        w["total"] += secs
+        w["longest"] = max(w["longest"], secs)
+        if secs <= limit:
+            return []
+        w["over"] += 1
+        if secs < limit + 1 or not self._ready("restart:" + ev.team, 600):  # clear cases only, one per 10 minutes
+            return []
+        return [self._moment(ev, "restart_late_" + kind, 0.35, None, ev.team, secs=secs, limit=int(limit),
+                             over=w["over"])]
+
+    def _physical(self, ev: Event) -> None:
+        """Distance covered, top speed and fast runs, measured between consecutive 1-second tracking frames.
+        Jumps faster than any player can run (9.5 m/s, 34 km/h) and the walk-back during long stoppages are skipped."""
+        last, self._last_frame = self._last_frame, (ev.t, ev.meta["pos"], ev.meta["phase"])
+        if not last or not self.tactics.rosters:
+            return
+        dt = ev.t - last[0]
+        if not 0.5 <= dt <= 1.5 or "stoppage" in (last[2], ev.meta["phase"]):
+            return
+        for i, (p, q) in enumerate(zip(last[1], ev.meta["pos"])):
+            v = math.hypot((q[0] - p[0]) * 1.05, (q[1] - p[1]) * 0.68) / dt
+            if v > MAX_RUN_MS:
+                continue
+            team = self.codes[i // 11]
+            ps = self._player(self.tactics.rosters[team][i % 11], team)
+            ps.distance_m += v * dt
+            kmh = v * 3.6
+            ps.top_speed = max(ps.top_speed, kmh)
+            if kmh >= HIGH_SPEED_KMH and not ps.fast:
+                ps.sprints += 1  # high-speed runs (the radar's "Fast runs")
+            ps.fast = kmh >= HIGH_SPEED_KMH
+
     # ---- main entry ----------------------------------------------------
     def ingest(self, ev: Event) -> List[Moment]:
         self.t = ev.t
         out: List[Moment] = []
         if ev.type == "tracking":
+            self._physical(ev)
             self.tactics.frame(ev)
             return [self._moment(ev, d["kind"], d["importance"], d["player"], d["team"], **d["facts"])
                     for d in self.tactics.pop_moments()]
@@ -154,6 +199,8 @@ class MatchState:
         self.report_builder.observe(ev)
         if ev.type == "warmup":
             return out
+        if ev.type == "restart_taken":
+            return self._restart_watch(ev)
         if ev.type in ("restart", "foul", "card", "offside"):
             ts0 = self.teams[ev.team]
             if ev.type == "restart":
@@ -178,6 +225,7 @@ class MatchState:
                                   "score_home": self.teams[home].goals, "score_away": self.teams[away].goals})
             return [self._moment(
                 ev, "goal", 1.0, ev.player, ev.team, own_goal=True, against_run=False,
+                scoring_team=self.teams[ev.team].name, player_team=self.teams[self._opp(ev.team)].name,
                 score_home=self.teams[home].goals, score_away=self.teams[away].goals,
                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-{self.teams[away].goals} {self.teams[away].name}",
                 pressure_pct=int(round(self.pressure_share(ev.team) * 100)))]
@@ -210,8 +258,9 @@ class MatchState:
                 self.last_pass = (ev.player, ev.team, ev.t)
             if ev.x >= 67:
                 weight = 1.0
-            if abs(ev.y - 50) >= 36 and ev.x >= 70:
-                ts.crosses += 1
+            ex, ey = ev.meta.get("ex", 0), ev.meta.get("ey", 50)
+            if abs(ev.y - 50) >= 36 and ev.x >= 70 and ex >= 84.3 and 20.4 <= ey <= 79.6:
+                ts.crosses += 1  # from a wide area into the penalty area
             diff = ev.meta.get("difficulty", 0)
             if ok and diff >= 0.8 and self._ready("hardpass:" + ev.player, 900):
                 out.append(self._moment(
@@ -223,10 +272,7 @@ class MatchState:
                                         count=ps.passes, acc=acc))
         elif ev.type == "carry":
             ts.actions += 1
-            speed = ev.meta.get("speed_kmh", 0)
-            ps.top_speed = max(ps.top_speed, speed)
-            if speed >= HIGH_SPEED_KMH:
-                ps.sprints += 1  # high-speed runs (the radar's "Fast runs")
+            speed = ev.meta.get("speed_kmh", 0)  # measured from tracking by the generator
             if ev.x >= 67:
                 weight = 1.0
             if speed >= SPRINT_KMH and self._ready("sprint:" + ev.player, 600):
@@ -298,6 +344,7 @@ class MatchState:
                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-"
                           f"{self.teams[away].goals} {self.teams[away].name}",
                 assist=assist, player_goals=ps.goals, penalty=bool(ev.meta.get("penalty")),
+                scoring_team=ts.name, player_team=ts.name,
                 pressure_pct=int(round(share * 100)), against_run=share < 0.35,
             )]
         if xg >= 0.25 and ev.outcome != "disallowed":
@@ -337,11 +384,15 @@ class MatchState:
             "t": self.t,
             "minute": int(self.t // 60) + 1,
             "momentum": self.momentum(),
+            "restart_watch": {c: {k: {"n": int(w["n"]), "over": int(w["over"]), "avg": round(w["total"] / w["n"], 1),
+                                      "longest": round(w["longest"], 1)} for k, w in kinds.items()}
+                              for c, kinds in self.restart_watch.items()},
             "players": {n: {"team": p.team, "passes": p.passes, "passes_ok": p.passes_ok,
                             "pass_acc": int(round(100 * p.passes_ok / p.passes)) if p.passes else 0,
                             "pass_diff": int(round(100 * p.diff_sum / p.passes_ok)) if p.passes_ok else 0,
                             "shots": p.shots, "on_target": p.on_target, "goals": p.goals, "assists": p.assists,
                             "xg": round(p.xg, 2), "sprints": p.sprints, "top_speed": int(p.top_speed),
+                            "distance_km": round(p.distance_m / 1000, 1),
                             "tackles": p.tackles, "interceptions": p.interceptions, "pressures": p.pressures}
                         for n, p in self.players.items()},
             "teams": {

@@ -1,17 +1,11 @@
-FROM node:20-slim AS ui
-WORKDIR /ui
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps
-COPY frontend ./
-RUN npm run build -- --outDir /ui/dist --emptyOutDir
-
-FROM python:3.11-slim
+# The React UI is built ahead of time (frontend/ -> src/itg/static, committed), so the image only needs Python.
+ARG BASE=python:3.11-slim
+FROM ${BASE}
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-COPY --from=ui /ui/dist ./src/itg/static
-RUN pip install --no-cache-dir . agent-framework openai azure-identity azure-eventhub
+RUN pip install --no-cache-dir . agent-framework openai azure-identity
 RUN useradd -m app
 USER app
 EXPOSE 8000

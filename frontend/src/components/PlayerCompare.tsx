@@ -15,7 +15,7 @@ const AXES: Axis[] = [
   { key: "def", label: "Defending", get: (p) => p.tackles + p.interceptions, floor: 6 },
   { key: "press", label: "Pressing", get: (p) => p.pressures, floor: 6 },
 ]
-const EMPTY: PlayerStat = { team: "", passes: 0, passes_ok: 0, pass_acc: 0, pass_diff: 0, shots: 0, on_target: 0, goals: 0, assists: 0, xg: 0, sprints: 0, top_speed: 0, tackles: 0, interceptions: 0, pressures: 0 }
+const EMPTY: PlayerStat = { team: "", passes: 0, passes_ok: 0, pass_acc: 0, pass_diff: 0, shots: 0, on_target: 0, goals: 0, assists: 0, xg: 0, sprints: 0, top_speed: 0, distance_km: 0, tackles: 0, interceptions: 0, pressures: 0 }
 
 function Radar({ players, colors }: { players: PlayerStat[]; colors: string[] }) {
   const n = AXES.length, R = 92, C = 150
@@ -63,7 +63,8 @@ export function PlayerCompareDialog({ open, onOpenChange, cfg, stats, codes, ini
   const items = (skip?: string) => [{ value: "", label: "Nobody" }, ...all.filter((p) => p.name !== skip).map((p) => ({ value: p.name, label: `${p.name} (${p.team})` }))]
   const rowsTbl: [string, (p: PlayerStat) => string][] = [
     ["Passes (completed)", (p) => `${p.passes_ok}/${p.passes}`], ["Goals · assists", (p) => `${p.goals} · ${p.assists}`], ["Shots (on target)", (p) => `${p.shots} (${p.on_target})`],
-    ["xG", (p) => p.xg.toFixed(2)], ["Fast runs (27+ km/h)", (p) => String(p.sprints)], ["Top speed", (p) => (p.top_speed ? `${p.top_speed} km/h` : "-")],
+    ["xG", (p) => p.xg.toFixed(2)], ["Distance covered", (p) => `${p.distance_km.toFixed(1)} km`], ["Fast runs (27+ km/h)", (p) => String(p.sprints)],
+    ["Top speed", (p) => (p.top_speed ? `${p.top_speed} km/h` : "-")],
     ["Tackles · interceptions", (p) => `${p.tackles} · ${p.interceptions}`], ["Pressures", (p) => String(p.pressures)],
   ]
   return (
@@ -71,7 +72,7 @@ export function PlayerCompareDialog({ open, onOpenChange, cfg, stats, codes, ini
       <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Player stats</DialogTitle>
-          <DialogDescription>Built from this match's events and scaled against every player so far. Pick a second player to compare.</DialogDescription>
+          <DialogDescription>Built from this match's events and 1-second tracking (distance, speed, fast runs), scaled against every player so far. Pick a second player to compare.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-2">
           {[{ v: nameA, set: (v: string) => setA(v), skip: b, c: colors[0] }, { v: b, set: (v: string) => setB(v), skip: nameA, c: colors[1] ?? "#9ca3af" }].map((s, i) => (
@@ -93,7 +94,7 @@ export function PlayerCompareDialog({ open, onOpenChange, cfg, stats, codes, ini
             ))}
           </tbody>
         </table>
-        <p className="text-muted-foreground text-[11px]">All data is synthetic. Fast runs and top speed come from ball-carry speeds in the event feed, not continuous tracking.</p>
+        <p className="text-muted-foreground text-[11px]">All data is synthetic. Distance, fast runs and top speed are measured from the synthetic 1-second tracking.</p>
       </DialogContent>
     </Dialog>
   )

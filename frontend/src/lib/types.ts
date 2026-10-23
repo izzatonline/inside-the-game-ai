@@ -4,7 +4,10 @@ export type Overlay = {
   headline: string; body: string; why: string; chips: Chip[]; lang: string; mode: string
   source: string; verified: boolean; player?: string | null
   facts?: Record<string, unknown>; model?: string
-  check?: { how: string; numbers: number; matched: number; unmatched: string[]; agents: string[] }
+  check?: {
+    how: string; numbers: number; matched: number; unmatched: string[]; agents: string[]
+    trace?: { agent: string; action: string; ok: boolean; note: string }[]; rewrites?: number; slot?: string; priority?: number
+  }
 }
 export type Role = { idx: number; name: string; role: string; short: string; x_in: number; y_in: number }
 export type TeamTactics = {
@@ -20,9 +23,13 @@ export type TeamStats = {
 }
 export type PlayerStat = {
   team: string; passes: number; passes_ok: number; pass_acc: number; pass_diff: number; shots: number; on_target: number; goals: number; assists: number
-  xg: number; sprints: number; top_speed: number; tackles: number; interceptions: number; pressures: number
+  xg: number; sprints: number; top_speed: number; distance_km: number; tackles: number; interceptions: number; pressures: number
 }
-export type Stats = { t: number; minute: number; momentum: number; teams: Record<string, TeamStats>; players?: Record<string, PlayerStat> }
+export type RestartTiming = { n: number; over: number; avg: number; longest: number }
+export type Stats = {
+  t: number; minute: number; momentum: number; teams: Record<string, TeamStats>; players?: Record<string, PlayerStat>
+  restart_watch?: Record<string, Record<string, RestartTiming>>
+}
 export type GoalLog = { minute: number; team: string; player: string; score_home: number; score_away: number; og?: boolean }
 export type CardLog = { minute: number; team: string; player: string; card: string }
 export type SubLog = { minute: number; team: string; slot: number; player_in: string; player_out: string; number: number }
@@ -32,6 +39,7 @@ export type Report = {
   metrics: { key: string; label: string; unit: string; home: number; away: number }[]
 }
 export type Recap = {
+  audio?: string  // spoken recap (Azure AI Speech), when configured
   headline: string; body: string; source: string; stats: Record<string, TeamStats>; home: string; away: string
   report: Report; goals: GoalLog[]; cards: CardLog[]; subs: SubLog[]; key_moments: { minute: number; kind: string; headline: string; team: string }[]
 }
@@ -52,5 +60,6 @@ export type Frames = {
   holder: [string, number] | null; band: 0 | 1 | 2; phase: string; phaseBand: 0 | 1 | 2; poss: string
   lastConfirmed: { team: string; idx: number; at: number } | null
   goal: { team: string; at: number } | null
+  flag: { team: string; player: string; x: number | null; at: number } | null  // offside: AR flag up
 }
 export type Selected = { team: number; idx: number } | null

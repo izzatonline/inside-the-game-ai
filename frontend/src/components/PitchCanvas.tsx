@@ -171,10 +171,21 @@ export function PitchCanvas(props: Props) {
       const fr = frames.current
       const dir = fr.poss === codes[1] ? -1 : 1  // team 0 attacks right (+x)
       const dead = isDeadBall(fr.phase)
-      const tx = ball[0] - dir * (dead ? 6 : 9)
-      const ty = dead ? (ball[1] < 50 ? ball[1] + 10 : ball[1] - 10) : 50 + (ball[1] - 50) * 0.45 + 8
+      // Diagonal system: about 15 m behind play and off to the side of it, never on top of the ball or a player.
+      const side = ball[1] < 50 ? 1 : -1  // the infield side of the ball
+      const tx = ball[0] - dir * 14
+      const ty = dead ? ball[1] + side * 16 : ball[1] + side * 18 + (50 - ball[1]) * 0.15
       const kr = 1 - Math.exp(-dt * 1.8), ka = 1 - Math.exp(-dt * 3)
-      ofc.r[0] += (cl(tx, 4, 96) - ofc.r[0]) * kr; ofc.r[1] += (cl(ty, 8, 92) - ofc.r[1]) * kr
+      ofc.r[0] += (cl(tx, 4, 96) - ofc.r[0]) * kr; ofc.r[1] += (cl(ty, 6, 94) - ofc.r[1]) * kr
+      const keepAway = (from: number[], minM: number) => {  // push the referee out to minM metres from a point
+        const dx = (ofc.r[0] - from[0]) * 1.05, dy = (ofc.r[1] - from[1]) * 0.68, d = Math.hypot(dx, dy)
+        if (d >= minM) return
+        const [ux, uy] = d > 1e-3 ? [dx / d, dy / d] : [-dir, 0]
+        ofc.r[0] = cl(from[0] + (ux * minM) / 1.05, 2, 98); ofc.r[1] = cl(from[1] + (uy * minM) / 0.68, 3, 97)
+      }
+      keepAway(ball, dead ? 10 : 12)
+      for (let pass = 0; pass < 2; pass++) for (const p of cur) keepAway(p, 4)
+      keepAway(ball, dead ? 10 : 12)
       const xs0 = cur.slice(0, 11).map((p) => p[0]).sort((a, b) => a - b), xs1 = cur.slice(11).map((p) => p[0]).sort((a, b) => b - a)
       const lineL = Math.min(xs0[1], 50), lineR = Math.max(xs1[1], 50)  // second-last defender; no offside in your own half
       ofc.a1 += (Math.max(2, lineL) - ofc.a1) * ka; ofc.a2 += (Math.min(98, lineR) - ofc.a2) * ka
@@ -547,6 +558,20 @@ export function PitchCanvas(props: Props) {
           const orr = Math.max(5.5, r * 0.95)
           token(X(of.R[0]), Y(of.R[1]), orr, "#111827", "#facc15", "R", 1, "#facc15")
           for (const a of [of.A1, of.A2]) token(X(a[0]), Y(a[1]), orr * 0.92, "#facc15", "#111827", "AR", 1, "#111827")
+          const fl = fr.flag
+          if (fl && ts - fl.at < 3500) {  // offside: the assistant on that half raises the flag for ~3 s
+            const right = fl.team === codes[0]  // team 0 attacks right, so the right-half AR flags them
+            const a = right ? of.A2 : of.A1, ax = X(a[0]), ay = Y(a[1]), up = a[1] > 50 ? -1 : 1
+            const lx = fl.x ?? (right ? of.lineR : of.lineL)
+            g.save(); g.strokeStyle = "#ef4444"; g.lineWidth = 2.5; g.setLineDash([]); g.globalAlpha = 0.9
+            g.beginPath(); g.moveTo(X(lx), Y(0)); g.lineTo(X(lx), Y(100)); g.stroke(); g.restore()
+            const top = ay + up * orr * 3.2
+            g.strokeStyle = "#e5e7eb"; g.lineWidth = 2; g.beginPath(); g.moveTo(ax + orr, ay); g.lineTo(ax + orr, top); g.stroke()
+            const wave = Math.sin(ts / 90) * 2
+            g.fillStyle = "#ef4444"; g.fillRect(ax + orr, top - (up < 0 ? 0 : orr * 1.3), orr * 1.6 + wave, orr * 1.3)
+            g.fillStyle = "#facc15"; g.fillRect(ax + orr, top - (up < 0 ? 0 : orr * 1.3), (orr * 1.6 + wave) / 2, orr * 0.65)
+            pill(`OFFSIDE · ${fl.player.split(" ").slice(-1)[0]}`, cl(X(lx), 60, W - 60), Y(50), "#ef4444")
+          }
         }
         const bx = X(curBall[0]), by = Y(curBall[1])
         const brr = Math.max(5.5, r * 0.85)

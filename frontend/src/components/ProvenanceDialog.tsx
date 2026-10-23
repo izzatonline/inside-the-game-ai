@@ -1,4 +1,4 @@
-import { Check, Cpu, ScanSearch, Sparkles, TriangleAlert } from "lucide-react"
+import { Check, Cpu, RotateCcw, ScanSearch, Sparkles, TriangleAlert } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { Overlay } from "@/lib/types"
 
@@ -52,6 +52,22 @@ export function ProvenanceDialog({ o, open, onOpenChange }: { o: Overlay; open: 
             {" "}It checks numbers only; it does not judge football rules or opinions.
           </Step>
         </ol>
+        {c?.trace && c.trace.length > 0 && (
+          <section>
+            <h4 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] uppercase">
+              Agent workflow{c.rewrites ? <span className="flex items-center gap-1 normal-case tracking-normal text-amber-600 dark:text-amber-400"><RotateCcw className="size-3" />{c.rewrites} sent back for a rewrite</span> : null}
+            </h4>
+            <ol className="space-y-1 text-[13px]">
+              {c.trace.map((s, i) => (
+                <li key={i} className="grid grid-cols-[1rem_5.5rem_1fr] items-baseline gap-1.5">
+                  {s.ok ? <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" /> : <TriangleAlert className="size-3.5 text-amber-600 dark:text-amber-400" />}
+                  <span className="font-semibold">{s.agent}</span>
+                  <span className="text-muted-foreground">{s.action}{s.note ? <span className="block text-[11px]">{s.note}</span> : null}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         {facts.length > 0 && (
           <section>
             <h4 className="text-muted-foreground mb-2 text-[11px] font-semibold tracking-[0.12em] uppercase">Facts it was given</h4>

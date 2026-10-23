@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Activity, ArrowUpDown, Box, ChevronDown, ChevronRight, ChevronUp, Info, MapPin, Moon, PanelLeft, Pause, Play, RotateCcw, Settings as SettingsIcon, Sun } from "lucide-react"
-import { MomentCard } from "@/components/MomentCard"
+import { MomentCard, MomentSkeleton } from "@/components/MomentCard"
 import { MomentumChart } from "@/components/MomentumChart"
 import { RolesLegend } from "@/components/RolesLegend"
 import { PitchCanvas } from "@/components/PitchCanvas"
@@ -238,9 +238,10 @@ function Match({ cfg, matchId, theme, next, onNext }: { cfg: Config; matchId: st
           </div>
           <TabsContent value="moments" className="space-y-2">
             {recap && <RecapCard recap={recap} codes={codes} onReport={() => { setTab("stats"); setPitchHidden(true) }} />}
-            {overlays.length === 0 && <p className="text-muted-foreground py-6 text-center text-sm">Waiting for the first key moment…</p>}
+            {overlays.length === 0 && <p className="text-muted-foreground pt-1 pb-2 text-center text-xs">Waiting for the first key moment…</p>}
             <ol className="relative before:absolute before:top-2 before:bottom-0 before:left-[58px] before:w-px before:bg-border">
               {overlays.map((o) => <MomentCard key={o.moment_id} o={o} awayCode={codes[1]} />)}
+              {overlays.length === 0 && [1, 0.75, 0.5, 0.3].map((f, i) => <MomentSkeleton key={i} fade={f} lines={i % 2 ? 1 : 2} />)}
             </ol>
             {overlays[0] && <details className="text-muted-foreground text-sm"><summary className="cursor-pointer">Machine-readable overlay (latest)</summary>
               <ScrollArea className="bg-muted mt-2 h-48 rounded-lg"><pre className="p-3 text-[11.5px]">{JSON.stringify(overlays[0], null, 2)}</pre></ScrollArea></details>}

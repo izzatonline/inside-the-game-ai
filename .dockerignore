@@ -6,4 +6,10 @@ tests/
 infra/
 *.egg-info/
 frontend/node_modules
-src/itg/static
+.git/
+videos/
+docs/
+scripts/
+*.pt
+*.mp4
+frontend/dist

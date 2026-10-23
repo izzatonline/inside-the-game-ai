@@ -16,6 +16,7 @@ WINDOW_S = 420.0
 UPDATE_S = 60.0
 FIRST_UPDATE_S = 240.0
 MIN_FRAMES = 6
+SETTLE_S = 4.0  # seconds after a change of possession before a frame counts towards a team's shape
 
 HIGH_LINE, LOW_LINE = 31.0, 22.0
 PRESS_PPDA, PASSIVE_PPDA = 3.0, 6.0  # PPDA-like: opponent passes per defensive action (synthetic scale)
@@ -100,7 +101,8 @@ def hull_area_m2(points: List[Tuple[float, float]]) -> float:
 class TacticsAnalyzer:
     def __init__(self, codes: List[str], names: Dict[str, str], rosters: Dict[str, List[str]]):
         self.codes, self.names, self.rosters = codes, names, rosters
-        self.frames: Dict[str, Deque[Tuple[float, bool, List[List[float]]]]] = {c: deque() for c in codes}
+        # (t, in possession, team-relative positions, slot on the ball or -1)
+        self.frames: Dict[str, Deque[Tuple[float, bool, List[List[float]], int]]] = {c: deque() for c in codes}
         self.passes: Dict[str, Deque[Tuple[float, float, bool, bool]]] = {c: deque() for c in codes}
         self.defacts: Dict[str, Deque[Tuple[float, float]]] = {c: deque() for c in codes}
         self.profiles: Dict[str, Dict[str, Any]] = {}
@@ -113,6 +115,7 @@ class TacticsAnalyzer:
         self._primary: Dict[str, str] = {}
         self._moments: List[Dict[str, Any]] = []
         self._dirty = False
+        self._poss, self._poss_since = "", 0.0
 
     # ---- ingest --------------------------------------------------------
     def observe(self, ev: Event) -> None:
@@ -124,10 +127,16 @@ class TacticsAnalyzer:
 
     def frame(self, ev: Event) -> None:
         pos, poss = ev.meta["pos"], ev.meta["poss"]
-        for ci, c in enumerate(self.codes):
+        if poss != self._poss:
+            self._poss, self._poss_since = poss, ev.t
+        # shapes come from settled open play: not set pieces or kick-offs, and not the seconds right after a
+        # turnover, when players are still running from one shape to the other
+        open_play = ev.meta.get("phase", "open") == "open" and ev.t - self._poss_since >= SETTLE_S
+        for ci, c in enumerate(self.codes if open_play else ()):
             seg = pos[ci * 11:(ci + 1) * 11]
             rel = seg if ci == 0 else [[100 - x, 100 - y] for x, y in seg]
-            self.frames[c].append((ev.t, c == poss, rel))
+            h = ev.meta.get("holder")
+            self.frames[c].append((ev.t, c == poss, rel, h[1] if h and h[0] == c else -1))
         for dq in (*self.frames.values(), *self.passes.values(), *self.defacts.values()):
             while dq and ev.t - dq[0][0] > WINDOW_S:
                 dq.popleft()
@@ -143,8 +152,12 @@ class TacticsAnalyzer:
         if len(fin) < MIN_FRAMES or len(fout) < MIN_FRAMES:
             return None
 
-        def avg(frames):
-            return [[sum(f[2][i][a] for f in frames) / len(frames) for a in (0, 1)] for i in range(11)]
+        def avg(frames):  # where each player stands off the ball: frames where they carry it follow the ball instead
+            out = []
+            for i in range(11):
+                own = [f for f in frames if f[3] != i] or frames
+                out.append([sum(f[2][i][a] for f in own) / len(own) for a in (0, 1)])
+            return out
 
         a_out, a_in = avg(fout), avg(fin)
         gk = min(range(11), key=lambda i: a_out[i][0])
@@ -152,14 +165,29 @@ class TacticsAnalyzer:
         xs = [a_out[i][0] for i in field]
         sse3, cuts3 = _partition(xs, 3)
         sse4, cuts4 = _partition(xs, 4)
-        cuts = cuts4 if sse3 > 0 and sse4 < 0.3 * sse3 else cuts3
+        cuts = cuts4 if sse3 > 0 and sse4 < 0.4 * sse3 else cuts3
+        if cuts is cuts3 and cuts3[0] < 3:  # a two-man back line is never right: the 4-line split (merged below) is
+            cuts = cuts4
         groups, start = [], 0
         for cut in cuts:
             groups.append(field[start:cut])
             start = cut
-        if len(groups) == 4 and len(groups[0]) < 3:  # no real shape has a two-man back line: a staggered back four
-            groups[:2] = [groups[0] + groups[1]]
+        # A middle "line" made only of wide players is full-backs, wing-backs or wide midfielders standing a few
+        # metres higher than the players inside them, not a line of its own; and no real shape has a two-man back line.
+        wide = lambda i: abs(a_out[i][1] - 50) >= 20  # noqa: E731
+        if len(groups) == 4 and len(groups[0]) < 3:  # staggered back four: the full-backs join the centre-backs
+            fbs = [i for i in groups[1] if wide(i)]
+            if fbs and len(fbs) < len(groups[1]):
+                groups[0], groups[1] = groups[0] + fbs, [i for i in groups[1] if not wide(i)]
+            else:
+                groups[:2] = [groups[0] + groups[1]]
+        elif len(groups) == 4:
+            for gi in (1, 2):
+                if all(wide(i) for i in groups[gi]):
+                    groups[gi - 1:gi + 1] = [groups[gi - 1] + groups[gi]]
+                    break
         formation = "-".join(str(len(g)) for g in groups)
+        formation = {"4-1-2-3": "4-3-3"}.get(formation, formation)  # a 4-3-3 with a holding midfielder, usual name
 
         roles = {gk: "Goalkeeper"}
         mids = groups[1:-1]
@@ -199,7 +227,7 @@ class TacticsAnalyzer:
 
         # shape metrics from out-of-possession frames (outfield only)
         areas, spreads = [], []
-        for _, _, rel in fout:
+        for _, _, rel, _ in fout:
             pts = [(rel[i][0], rel[i][1]) for i in range(11) if i != gk]
             areas.append(hull_area_m2(pts))
             ys = [p[1] for p in pts]

@@ -2,13 +2,15 @@
 Microsoft Agent Framework agent / workflow executor (see README) without changing logic.
 
 Roles: Personalizer (relevance) -> Explainer (why it matters) -> Narrator (words)
-       -> FactChecker (grounding guard) ; RecapAgent writes the full-time story.
+       -> FactChecker (grounding guard, sends rejected drafts back for a rewrite) -> Editor (how it airs);
+       RecapAgent writes the full-time story.
 """
 from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .llm import get_llm
 from .models import Moment, Overlay, Profile
@@ -31,6 +33,44 @@ def _numbers(obj: Any) -> List[float]:
     if isinstance(obj, (list, tuple)):
         return [n for v in obj for n in _numbers(v)]
     return []
+
+
+# Meaning check for goal captions, per language: a goal must read as a goal, not a miss; "level" only when level;
+# an own goal must say so and must not put the player in the team that benefits. Other languages: numbers only.
+_GOAL = {"en": r"\b(goals?|scores?|scored|nets?|netted|converts?|converted|finish(es|ed)?|strikes?|header|winner|equali[sz]\w*|own goal)\b",
+         "es": r"\b(gol\w*|marca\w*|anota\w*|convierte\w*|define\w*|autogol)\b",
+         "ms": r"\b(gol|jaring\w*|menjaring\w*|skor\w*)\b",
+         "fr": r"\b(but|buts|marque\w*|égalis\w*)\b", "pt": r"\b(gol\w*|marca\w*|golo\w*)\b"}
+_MISS = {"en": r"\b(miss(es|ed)?|chances?|wide|saved|over the bar|shoots? high|fires? (wide|over))\b",
+         "es": r"\b(fall\w*|ocasi[oó]n|dispara alto|desv[ií]\w*|parad\w*|al palo)\b",
+         "ms": r"\b(terlepas|peluang|tersasar)\b", "fr": r"\b(manqu\w*|occasion|raté\w*)\b",
+         "pt": r"\b(perd\w*|chance|desperdi\w*)\b"}
+_LEVEL = {"en": r"\b(level(s|led|ler)?|equali[sz]\w*|all square)\b", "es": r"\b(empat\w*|igual\w*)\b",
+          "ms": r"\b(menyamakan|seri)\b", "fr": r"\b(égalis\w*)\b", "pt": r"\b(empat\w*|igual\w*)\b"}
+_OWN = {"en": r"own goal|own net", "es": r"autogol|en propia", "ms": r"gol sendiri", "fr": r"contre son camp", "pt": r"gol contra|autogolo"}
+
+
+def meaning_problems(m: Moment, lang: str, headline: str, body: str) -> List[str]:
+    """What a goal caption gets wrong in meaning (empty list = fine). Numbers are the FactChecker's job."""
+    f = m.facts
+    words = re.findall(r"\w+", headline.lower())
+    if words and max(words.count(w) for w in words) >= 3:
+        return ["the headline repeats the same word; write a real headline"]
+    if m.kind != "goal" or lang not in _GOAL:
+        return []
+    text, head, out = f"{headline} {body}", headline, []
+    if not re.search(_GOAL[lang], text, re.I):
+        out.append("it must say that a goal was scored")
+    if re.search(_MISS[lang], head, re.I):
+        out.append("the headline describes a miss or a chance, but this was a goal")
+    if re.search(_LEVEL[lang], text, re.I) and f.get("score_home") != f.get("score_away"):
+        out.append("it says the score is level, but it is not")
+    if f.get("own_goal"):
+        if not re.search(_OWN[lang], text, re.I):
+            out.append("it must say this was an own goal")
+        if f"{m.player} ({f.get('scoring_team')}" in text or f"{m.player} of {f.get('scoring_team')}" in text:
+            out.append(f"{m.player} plays for {f.get('player_team')}, not {f.get('scoring_team')}")
+    return out
 
 
 class FactChecker:
@@ -105,9 +145,15 @@ class ExplainerAgent:
     def __init__(self, llm) -> None:
         self.llm = llm
 
+    def draft(self, m: Moment, lang: str, feedback: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """One model draft, unchecked. `feedback` carries a rejected draft and why it was rejected."""
+        payload: Dict[str, Any] = {"kind": m.kind, "facts": m.facts}
+        if feedback:
+            payload["rejected_draft"] = feedback
+        return self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(lang, lang)), json.dumps(payload), 120)
+
     def run(self, m: Moment, lang: str) -> Tuple[str, str]:
-        text = self.llm.complete(self.SYSTEM.format(language=LANGUAGES.get(lang, lang)),
-                                 json.dumps({"kind": m.kind, "facts": m.facts}), 120)
+        text = self.draft(m, lang)
         if text and FactChecker().run(text, m.facts):
             return text, "llm"
         return _fmt(_tmpl(lang, _template_key(m))[2], m.facts), "template"
@@ -116,26 +162,164 @@ class ExplainerAgent:
 class NarratorAgent:
     SYSTEM = ("You are a broadcast commentator writing a short on-screen caption. Return JSON "
               '{{"headline": "<=6 words", "body": "<=25 words"}}. Tone: {tone}. Language: {language}. '
-              "Use ONLY the facts provided; never invent numbers, names or events.")
+              "Use ONLY the facts provided; never invent numbers, names or events. "
+              "For a goal: the headline says a goal was scored (never a chance, shot or miss); say level or equaliser "
+              "only when score_home equals score_away; if own_goal is true, the player (of player_team) put the ball "
+              "into their own net and scoring_team benefits.")
 
     def __init__(self, llm) -> None:
         self.llm = llm
 
-    def run(self, m: Moment, p: Profile) -> Tuple[str, str, str]:
+    def draft(self, m: Moment, p: Profile, feedback: Optional[Dict[str, Any]] = None) -> Optional[Tuple[str, str]]:
+        """One model draft (headline, body), unchecked; None if the model failed or returned bad JSON."""
         tone = ("energetic, plain words for a casual fan" if p.mode == "casual"
                 else "precise and tactical, for an analyst")
+        payload: Dict[str, Any] = {"kind": m.kind, "facts": m.facts}
+        if feedback:
+            payload["rejected_draft"] = feedback
         raw = self.llm.complete(self.SYSTEM.format(tone=tone, language=LANGUAGES.get(p.lang, p.lang)),
-                                json.dumps({"kind": m.kind, "facts": m.facts}), 160)
+                                json.dumps(payload), 160)
         if raw:
             try:
                 data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip())
-                h, b = str(data["headline"]), str(data["body"])
-                if FactChecker().run(h + " " + b, m.facts):
-                    return h, b, "llm"
+                return str(data["headline"]), str(data["body"])
             except (ValueError, KeyError, TypeError):
                 pass
+        return None
+
+    def run(self, m: Moment, p: Profile) -> Tuple[str, str, str]:
+        d = self.draft(m, p)
+        if d and FactChecker().run(d[0] + " " + d[1], m.facts):
+            return d[0], d[1], "llm"
         h, b, _ = _tmpl(p.lang, _template_key(m))
         return _fmt(h, m.facts), _fmt(b, m.facts), "template"
+
+
+MAX_REWRITES = 2  # after the first draft, how many times the FactChecker may send a part back
+
+
+@dataclass
+class Job:
+    """One moment moving through the newsroom: Explainer -> Narrator -> FactChecker (-> back for a rewrite) -> Editor."""
+    moment: Moment
+    profile: Profile
+    why: str = ""
+    headline: str = ""
+    body: str = ""
+    why_ai: bool = False
+    cap_ai: bool = False
+    redo: Set[str] = field(default_factory=lambda: {"why", "caption"})
+    feedback: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    attempts: Dict[str, int] = field(default_factory=lambda: {"Explainer": 0, "Narrator": 0})
+    trace: List[Dict[str, Any]] = field(default_factory=list)
+    route: str = ""
+    source: str = "template"
+    slot: str = ""
+    priority: int = 0
+    duration_s: float = 5.0
+    verified: bool = False
+
+    def log(self, agent: str, action: str, ok: bool = True, note: str = "") -> None:
+        self.trace.append({"agent": agent, "action": action, "ok": ok, "note": note})
+
+
+def _with_retry(call):
+    """Recovery: one immediate retry when a model call fails or returns nothing usable."""
+    out = call()
+    return (out, 1) if out else (call(), 2)
+
+
+class Newsroom:
+    """The steps of the review loop, shared by the plain-Python path and the Agent Framework workflow
+    (each step is one executor there), so both produce the same result."""
+
+    def __init__(self, explainer: "ExplainerAgent", narrator: "NarratorAgent") -> None:
+        self.explainer, self.narrator = explainer, narrator
+
+    def explain(self, job: Job) -> None:
+        if "why" not in job.redo:
+            return
+        job.redo.discard("why")
+        job.attempts["Explainer"] += 1
+        fb = job.feedback.pop("why", None)
+        text, calls = _with_retry(lambda: self.explainer.draft(job.moment, job.profile.lang, fb))
+        if text:
+            job.why, job.why_ai = text, True
+            job.log("Explainer", "rewrote why it matters" if fb else "wrote why it matters", True,
+                    "model retried once" if calls > 1 else "")
+        else:
+            job.why, job.why_ai = _fmt(_tmpl(job.profile.lang, _template_key(job.moment))[2], job.moment.facts), False
+            job.log("Explainer", "used the template", False, "model unavailable after a retry")
+
+    def narrate(self, job: Job) -> None:
+        if "caption" not in job.redo:
+            return
+        job.redo.discard("caption")
+        job.attempts["Narrator"] += 1
+        fb = job.feedback.pop("caption", None)
+        d, calls = _with_retry(lambda: self.narrator.draft(job.moment, job.profile, fb))
+        if d:
+            job.headline, job.body, job.cap_ai = d[0], d[1], True
+            job.log("Narrator", "rewrote the caption" if fb else "wrote the caption", True,
+                    "model retried once" if calls > 1 else "")
+        else:
+            h, b, _ = _tmpl(job.profile.lang, _template_key(job.moment))
+            job.headline, job.body, job.cap_ai = _fmt(h, job.moment.facts), _fmt(b, job.moment.facts), False
+            job.log("Narrator", "used the template", False, "model unavailable after a retry")
+
+    def check(self, job: Job) -> None:
+        """Approve, or send each failing part back to its writer with the numbers that broke the rule.
+        After MAX_REWRITES the part falls back to the grounded template."""
+        facts, fc = job.moment.facts, FactChecker()
+        parts = [("why", "Explainer", job.why_ai, job.why), ("caption", "Narrator", job.cap_ai, f"{job.headline} {job.body}")]
+        for part, writer, ai, text in parts:
+            if not ai:
+                continue
+            bad = fc.audit(text, facts)["unmatched"]
+            sense = meaning_problems(job.moment, job.profile.lang, job.headline, job.body) if part == "caption" else []
+            if not bad and not sense:
+                continue
+            why_not = "; ".join((["numbers not in the facts: " + ", ".join(bad)] if bad else []) + sense)
+            if job.attempts[writer] <= MAX_REWRITES:
+                job.redo.add(part)
+                job.feedback[part] = {"draft": text, "numbers_not_in_facts": bad, "meaning_problems": sense,
+                                      "instruction": "Rewrite it. Use only numbers that appear in facts, and fix the meaning problems."}
+                job.log("FactChecker", f"sent the {'why' if part == 'why' else 'caption'} back to the {writer}", False, why_not)
+            else:
+                h, b, w = _tmpl(job.profile.lang, _template_key(job.moment))
+                if part == "why":
+                    job.why, job.why_ai = _fmt(w, facts), False
+                else:
+                    job.headline, job.body, job.cap_ai = _fmt(h, facts), _fmt(b, facts), False
+                job.log("FactChecker", f"rejected the {writer}'s last draft, template used", False, why_not)
+        job.route = "rewrite" if job.redo else "edit"
+        if job.route == "edit":
+            job.verified = True
+            if job.why_ai or job.cap_ai:
+                job.log("FactChecker", "approved every number" + (" and the meaning" if job.moment.kind == "goal" else ""), True)
+
+    def edit(self, job: Job) -> None:
+        """Editor: decides how the verified card airs (screen slot, priority, time on screen)."""
+        m = job.moment
+        job.source = "llm" if (job.why_ai or job.cap_ai) else "template"
+        big = m.kind in ("goal", "var") or m.importance >= 0.9
+        job.slot = "full_width" if big else "lower_third" if m.importance >= 0.6 else "ticker"
+        job.priority = 3 if big else 2 if m.importance >= 0.6 else 1
+        words = len(f"{job.headline} {job.body}".split())
+        job.duration_s = (8.0 if big else 5.0) + (2.0 if words > 22 else 0.0)
+        job.log("Editor", f"aired it: {job.slot.replace('_', ' ')}, {job.duration_s:g} s", True)
+
+    def run(self, moment: Moment, profile: Profile) -> Job:
+        """The same loop without Agent Framework."""
+        job = Job(moment, profile)
+        while True:
+            self.explain(job)
+            self.narrate(job)
+            self.check(job)
+            if job.route == "edit":
+                break
+        self.edit(job)
+        return job
 
 
 class RecapAgent:
@@ -249,6 +433,7 @@ class MatchPipeline:
         self.narrator = NarratorAgent(self.llm)
         self.recapper = RecapAgent(self.llm)
         self.tactician = TacticalAnalystAgent(self.llm)
+        self.newsroom = Newsroom(self.explainer, self.narrator)
         self.cache = cache if cache is not None else {}  # shared across viewers of the same match
         self.shown: List[Tuple[Moment, Overlay]] = []
 
@@ -260,16 +445,16 @@ class MatchPipeline:
             key = (m.id, profile.lang, profile.mode, profile.ai)
             if key not in self.cache:
                 if not profile.ai:  # viewer switched AI off: grounded templates only
+                    job = Job(m, profile, redo=set())
                     h, b, w = _tmpl(profile.lang, _template_key(m))
-                    self.cache[key] = (_fmt(w, m.facts), _fmt(h, m.facts), _fmt(b, m.facts), "template")
-                elif self.runner:
-                    job = self.runner.run(m, profile)
-                    self.cache[key] = (job.why, job.headline, job.body, job.source)
+                    job.why, job.headline, job.body = _fmt(w, m.facts), _fmt(h, m.facts), _fmt(b, m.facts)
+                    job.log("Narrator", "used the template", True, "AI switched off by the viewer")
+                    self.newsroom.edit(job)
                 else:
-                    why, s1 = self.explainer.run(m, profile.lang)
-                    headline, body, s2 = self.narrator.run(m, profile)
-                    self.cache[key] = (why, headline, body, "llm" if "llm" in (s1, s2) else "template")
-            why, headline, body, source = self.cache[key]
+                    job = self.runner.run(m, profile) if self.runner else self.newsroom.run(m, profile)
+                self.cache[key] = job
+            job = self.cache[key]
+            why, headline, body, source = job.why, job.headline, job.body, job.source
             audit = (FactChecker().audit(f"{headline} {body} {why}", m.facts) if source == "llm"
                      else {"numbers": [], "matched": [], "unmatched": []})  # templates are fixed wording, nothing to audit
             how = ("ai" if source == "llm" else "ai_off" if not profile.ai
@@ -279,10 +464,12 @@ class MatchPipeline:
                 importance=m.importance, headline=headline, body=body,
                 why=why if profile.mode == "analyst" or m.importance >= 0.9 else "",
                 chips=self.personalizer.chips(m, profile), lang=profile.lang, mode=profile.mode,
-                source=source, verified=True, duration_s=8.0 if m.importance >= 0.9 else 5.0, player=m.player,
+                source=source, verified=True, duration_s=job.duration_s, player=m.player,
                 facts=m.facts, model=(getattr(self.llm, "deployment", "") or self.llm.name) if source == "llm" else "",
                 check={"how": how, "numbers": len(audit["numbers"]), "matched": len(audit["matched"]),
-                       "unmatched": audit["unmatched"], "agents": ["Explainer", "Narrator", "FactChecker"]})
+                       "unmatched": audit["unmatched"], "agents": ["Explainer", "Narrator", "FactChecker", "Editor"],
+                       "trace": job.trace, "rewrites": sum(1 for s in job.trace if s["agent"] == "FactChecker" and not s["ok"]),
+                       "slot": job.slot, "priority": job.priority})
             self.shown.append((m, ov))
             overlays.append(ov)
         return overlays

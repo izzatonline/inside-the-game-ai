@@ -2,9 +2,11 @@
 
 * `FoundryLLM`  - LLM backend: each prompt becomes an `agent_framework.Agent` on a
                   `FoundryChatClient` (Microsoft Foundry project + model deployment).
-* `MafRunner`   - runs Explainer -> Narrator -> FactChecker as an Agent Framework
-                  `Workflow` (Executors + edges). Offline it uses template fallbacks, so the
-                  workflow itself is testable without credentials.
+* `MafRunner`   - runs Explainer -> Narrator -> FactChecker -> Editor as an Agent Framework
+                  `Workflow` (Executors + edges). The FactChecker has a conditional edge back to the
+                  Explainer: a rejected draft goes back for a rewrite with the numbers that broke the
+                  rule (up to MAX_REWRITES), then falls back to the template. Offline it uses template
+                  fallbacks, so the workflow itself is testable without credentials.
 
 No `from __future__ import annotations` here: Agent Framework inspects handler type hints.
 """
@@ -18,8 +20,8 @@ from typing import Any, Dict, List, Optional
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from typing_extensions import Never
 
-from .agents import (ExplainerAgent, FactChecker, NarratorAgent, TacticalAnalystAgent, _fmt, _template_key,
-                     _tmpl, tactical_facts)
+from .agents import (ExplainerAgent, FactChecker, Job, NarratorAgent, Newsroom, TacticalAnalystAgent,
+                     tactical_facts)
 from .models import Moment, Profile
 
 log = logging.getLogger("itg.maf")
@@ -70,55 +72,49 @@ class FoundryLLM:
             return None
 
 
-@dataclass
-class Job:
-    moment: Moment
-    profile: Profile
-    why: str = ""
-    headline: str = ""
-    body: str = ""
-    source: str = "template"
-    verified: bool = False
-
-
 class ExplainerExecutor(Executor):
-    def __init__(self, agent: ExplainerAgent) -> None:
+    def __init__(self, room: Newsroom) -> None:
         super().__init__(id="explainer")
-        self.agent = agent
+        self.room = room
 
     @handler
     async def run(self, job: Job, ctx: WorkflowContext[Job]) -> None:
-        job.why, job.source = await asyncio.to_thread(self.agent.run, job.moment, job.profile.lang)
+        await asyncio.to_thread(self.room.explain, job)  # no-op unless the why needs (re)writing
         await ctx.send_message(job)
 
 
 class NarratorExecutor(Executor):
-    def __init__(self, agent: NarratorAgent) -> None:
+    def __init__(self, room: Newsroom) -> None:
         super().__init__(id="narrator")
-        self.agent = agent
+        self.room = room
 
     @handler
     async def run(self, job: Job, ctx: WorkflowContext[Job]) -> None:
-        job.headline, job.body, src = await asyncio.to_thread(self.agent.run, job.moment, job.profile)
-        if src == "llm":
-            job.source = "llm"
+        await asyncio.to_thread(self.room.narrate, job)
         await ctx.send_message(job)
 
 
 class FactCheckExecutor(Executor):
-    """Final gate: anything not grounded in the moment's facts is replaced by the template."""
+    """Gate: approves, or routes the job back (edge to the Explainer) with the numbers that broke the rule."""
 
-    def __init__(self) -> None:
+    def __init__(self, room: Newsroom) -> None:
         super().__init__(id="fact_checker")
+        self.room = room
+
+    @handler
+    async def run(self, job: Job, ctx: WorkflowContext[Job]) -> None:
+        self.room.check(job)
+        await ctx.send_message(job)
+
+
+class EditorExecutor(Executor):
+    def __init__(self, room: Newsroom) -> None:
+        super().__init__(id="editor")
+        self.room = room
 
     @handler
     async def run(self, job: Job, ctx: WorkflowContext[Never, Job]) -> None:
-        text = f"{job.headline} {job.body} {job.why}"
-        job.verified = FactChecker().run(text, job.moment.facts)
-        if not job.verified:
-            h, b, w = _tmpl(job.profile.lang, _template_key(job.moment))
-            job.headline, job.body = _fmt(h, job.moment.facts), _fmt(b, job.moment.facts)
-            job.why, job.source, job.verified = _fmt(w, job.moment.facts), "template", True
+        self.room.edit(job)
         await ctx.yield_output(job)
 
 
@@ -165,13 +161,18 @@ class TacticsGuardExecutor(Executor):
 
 class MafRunner:
     def __init__(self, llm: Any) -> None:
-        self.explainer, self.narrator = ExplainerAgent(llm), NarratorAgent(llm)
+        self.room = Newsroom(ExplainerAgent(llm), NarratorAgent(llm))
         self.tactician = TacticalAnalystAgent(llm)
 
     def _workflow(self):
         # Fresh instance per run: a built Workflow holds run state, viewers run concurrently.
-        ex, nar, chk = ExplainerExecutor(self.explainer), NarratorExecutor(self.narrator), FactCheckExecutor()
-        return WorkflowBuilder(start_executor=ex).add_edge(ex, nar).add_edge(nar, chk).build()
+        ex, nar, chk, ed = (ExplainerExecutor(self.room), NarratorExecutor(self.room), FactCheckExecutor(self.room),
+                            EditorExecutor(self.room))
+        return (WorkflowBuilder(start_executor=ex)
+                .add_edge(ex, nar).add_edge(nar, chk)
+                .add_edge(chk, ex, condition=lambda job: job.route == "rewrite")  # the review loop
+                .add_edge(chk, ed, condition=lambda job: job.route == "edit")
+                .build())
 
     async def _run(self, job: Job) -> Job:
         return (await self._workflow().run(job)).get_outputs()[0]

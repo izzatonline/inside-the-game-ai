@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { fmtMinute } from "@/lib/format"
 import { ProvenanceDialog } from "@/components/ProvenanceDialog"
-import { ArrowLeftRight, Goal, LayoutGrid, Medal, Send, Info, Target, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
+import { ArrowLeftRight, Goal, LayoutGrid, Medal, Send, Info, Target, Timer, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import { TEAM_COLORS } from "@/lib/theme"
 import type { Overlay } from "@/lib/types"
 
@@ -10,6 +11,24 @@ const KIND: Record<string, { label: string; Icon: LucideIcon }> = {
   chaos_spell: { label: "Chaos", Icon: Zap }, sprint: { label: "Sprint", Icon: Wind }, difficult_pass: { label: "Pass quality", Icon: Send },
   milestone: { label: "Milestone", Icon: Medal }, tactic_report: { label: "Shape", Icon: LayoutGrid }, tactic_shift: { label: "Tactical shift", Icon: ArrowLeftRight },
   role_reveal: { label: "Role", Icon: UserRound }, card: { label: "Card", Icon: TriangleAlert }, substitution: { label: "Substitution", Icon: Users },
+  restart_late_throw_in: { label: "Restart Watch", Icon: Timer }, restart_late_goal_kick: { label: "Restart Watch", Icon: Timer },
+  restart_late_keeper_hold: { label: "Restart Watch", Icon: Timer },
+}
+
+/** Placeholder with the same shape as a moment card, shown until the first moment arrives. */
+export function MomentSkeleton({ fade = 1, lines = 2 }: { fade?: number; lines?: number }) {
+  return (
+    <li aria-hidden className="relative grid grid-cols-[34px_28px_minmax(0,1fr)] gap-x-2.5 pb-5" style={{ opacity: fade }}>
+      <Skeleton className="mt-1.5 ml-auto h-3 w-6" />
+      <Skeleton className="relative z-[1] mt-0.5 size-7 rounded-full" />
+      <div className="space-y-2 pt-1">
+        <Skeleton className="h-2.5 w-16" />
+        <Skeleton className="h-4 w-3/5" />
+        {Array.from({ length: lines }, (_, i) => <Skeleton key={i} className={`h-3 ${i === lines - 1 ? "w-4/5" : "w-full"}`} />)}
+        <Skeleton className="ml-auto h-4 w-24 rounded-full" />
+      </div>
+    </li>
+  )
 }
 
 /** One entry on the match timeline: minute on the rail, icon node, then the story. Goals get a hero treatment. */

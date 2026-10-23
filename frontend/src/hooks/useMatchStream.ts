@@ -8,7 +8,7 @@ const emptyBench = (cfg: Config): BenchState => Object.fromEntries(Object.keys(c
 const startRoster = (cfg: Config) => Object.fromEntries(Object.entries(cfg.teams).map(([c, t]) => [c, t.players.slice()]))
 
 export function useMatchStream(settings: Settings, runId: number, cfg: Config, start = 0) {
-  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null })
+  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null })
   const latest = useRef(settings)
   latest.current = settings
   const latestStart = useRef(start)
@@ -32,7 +32,7 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
 
   useEffect(() => {
     const s = latest.current
-    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null }
+    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null }
     setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null); setPaused(false)
     const player = s.player.split(":")[2] ?? ""
     const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric, ai: s.ai })
@@ -82,6 +82,10 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
       })
       if (b.type === "substitution") setSubLog((prev) => [...prev, { minute: b.minute, team: b.team, slot: b.meta.slot, player_in: b.player, player_out: b.meta.player_out ?? "", number: b.meta.number }])
       if (b.type === "substitution") setRoster((prev) => ({ ...prev, [b.team]: prev[b.team].map((n, i) => (i === b.meta.slot ? b.player : n)) }))
+    })
+    es.addEventListener("flag", (e) => {
+      const f = JSON.parse((e as MessageEvent).data) as { team: string; player: string; line_x: number | null }
+      if (live) frames.current.flag = { team: f.team, player: f.player, x: f.line_x, at: performance.now() }
     })
     es.addEventListener("live", () => { live = true })
     es.addEventListener("tactics", (e) => { setTactics(JSON.parse((e as MessageEvent).data)); setStatus("AI shape analysis live") })

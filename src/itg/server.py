@@ -5,18 +5,20 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import pathlib
 from typing import Dict, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .agents import MatchPipeline
 from .bus import Broadcaster, make_source
 from .generator import DEFAULT_MATCH, MATCHES, MatchSpec, generate_match
 from .llm import get_llm
+from . import speech
 from .models import Profile
 from .tactics import formation_lines
 from .templates import LANGUAGES
@@ -67,6 +69,8 @@ async def _step(pipe, ev, profile, last_stats: float, frames: bool = True, stats
         out.append(_frame_chunk(ev, pipe.state))
     if ev.type in ("warmup", "substitution"):
         out.append(_sse("bench", ev.to_dict()))
+    if ev.type == "offside":  # the assistant referee's flag goes up in the pitch view
+        out.append(_sse("flag", {"t": ev.t, "team": ev.team, "player": ev.player, "line_x": ev.meta.get("line_x")}))
     tac = pipe.state.tactics.take_update()
     if tac:
         tac = await asyncio.to_thread(pipe.localize_tactics, tac, profile, ev.t)
@@ -97,6 +101,30 @@ def index():
     if not page.exists():
         return HTMLResponse("<p>UI not built. Run: <code>cd frontend && npm install --legacy-peer-deps && npm run build</code></p>")
     return FileResponse(page)
+
+
+_recap_text: Dict[str, Tuple[str, str]] = {}  # audio id -> (text, language): only recaps this server wrote
+
+
+def _recap_event(pipe, profile) -> str:
+    """The full-time recap, plus an id the client can use to hear it read aloud (Azure AI Speech)."""
+    r = pipe.recap(profile)
+    if speech.configured():
+        text = f"{r['headline']}. {r['body']}"
+        rid = hashlib.sha1(f"{profile.lang}|{text}".encode()).hexdigest()[:16]
+        _recap_text[rid] = (text, profile.lang)
+        r["audio"] = f"/api/recap_audio/{rid}"
+    return _sse("recap", r)
+
+
+@app.get("/api/recap_audio/{rid}")
+def recap_audio(rid: str):
+    if rid not in _recap_text:
+        raise HTTPException(404, "unknown recap")
+    audio = speech.synthesize(*_recap_text[rid])
+    if not audio:
+        raise HTTPException(503, "speech unavailable")
+    return Response(audio, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/api/matches")
@@ -161,7 +189,7 @@ async def stream(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str
             chunks, last_stats = await _step(pipe, ev, profile, last_stats)
             for c in chunks:
                 yield c
-        yield _sse("recap", await asyncio.to_thread(pipe.recap, profile))
+        yield await asyncio.to_thread(_recap_event, pipe, profile)
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})
@@ -204,7 +232,7 @@ async def live(seed: int = 7, speed: float = 60.0, lang: str = "en", mode: str =
                 chunks, last_stats = await _step(pipe, ev, profile, last_stats)
                 for c in chunks:
                     yield c
-            yield _sse("recap", await asyncio.to_thread(pipe.recap, profile))
+            yield await asyncio.to_thread(_recap_event, pipe, profile)
         finally:
             bc.unsubscribe(q)
 

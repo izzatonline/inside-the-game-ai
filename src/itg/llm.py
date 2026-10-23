@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+import threading
+import time
+from typing import Any, Optional
 
 log = logging.getLogger("itg.llm")
 
@@ -57,7 +59,38 @@ class AzureLLM:
             return None
 
 
+class Budgeted:
+    """Caps model calls per hour across all viewers (ITG_MAX_MODEL_CALLS_PER_HOUR) so a public demo cannot run
+    up the bill; over the cap, calls return None and the agents use grounded templates until the hour rolls over."""
+
+    def __init__(self, llm: Any, per_hour: int) -> None:
+        self.llm, self.per_hour = llm, per_hour
+        self._hour, self._used, self._lock = -1, 0, threading.Lock()
+
+    def __getattr__(self, name: str) -> Any:  # name, available, deployment... come from the wrapped model
+        return getattr(self.llm, name)
+
+    def complete(self, system: str, user: str, max_tokens: int = 250) -> Optional[str]:
+        with self._lock:
+            hour = int(time.time() // 3600)
+            if hour != self._hour:
+                self._hour, self._used = hour, 0
+            if self._used >= self.per_hour:
+                if self._used == self.per_hour:
+                    log.warning("Model call budget (%d/hour) reached; using templates until the hour rolls over", self.per_hour)
+                    self._used += 1
+                return None
+            self._used += 1
+        return self.llm.complete(system, user, max_tokens)
+
+
 def get_llm():
+    llm = _model()
+    cap = int(os.environ.get("ITG_MAX_MODEL_CALLS_PER_HOUR", "0") or 0)
+    return Budgeted(llm, cap) if cap and llm.available else llm
+
+
+def _model():
     if os.environ.get("FOUNDRY_PROJECT_ENDPOINT") and os.environ.get("FOUNDRY_MODEL"):
         try:
             from .maf import FoundryLLM

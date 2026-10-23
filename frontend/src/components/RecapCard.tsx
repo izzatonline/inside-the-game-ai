@@ -1,5 +1,6 @@
 import { fmtMinute } from "@/lib/format"
-import { Goal, ShieldCheck, TriangleAlert, Users } from "lucide-react"
+import { useRef, useState } from "react"
+import { Goal, Pause, ShieldCheck, TriangleAlert, Users, Volume2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,6 +18,24 @@ function Compare({ label, h, a, dec = 0 }: { label: string; h: number; a: number
         <div style={{ width: `${(100 * h) / tot}%`, background: TEAM_COLORS[0] }} /><div className="flex-1" style={{ background: TEAM_COLORS[1] }} />
       </div>
     </div>
+  )
+}
+
+/** Plays the recap read by an Azure AI Speech neural voice in the viewer's language. */
+function Listen({ src }: { src: string }) {
+  const ref = useRef<HTMLAudioElement | null>(null)
+  const [state, setState] = useState<"idle" | "loading" | "playing" | "error">("idle")
+  const toggle = () => {
+    const el = ref.current ?? (ref.current = new Audio(src))
+    el.onplaying = () => setState("playing"); el.onpause = el.onended = () => setState("idle"); el.onerror = () => setState("error")
+    if (state === "playing") el.pause()
+    else { setState("loading"); el.play().catch(() => setState("error")) }
+  }
+  return (
+    <Button variant="outline" size="sm" onClick={toggle} disabled={state === "error"} data-audio={src}>
+      {state === "playing" ? <Pause className="size-4" /> : <Volume2 className="size-4" />}
+      {state === "error" ? "Voice unavailable" : state === "loading" ? "Loading voice…" : state === "playing" ? "Pause" : "Listen to the recap"}
+    </Button>
   )
 }
 
@@ -38,6 +57,7 @@ export function RecapCard({ recap, codes, onReport }: { recap: Recap; codes: str
           <div className="min-w-0"><div className="mx-auto mb-1 size-2.5 rounded-full" style={{ background: TEAM_COLORS[1] }} /><div className="truncate text-sm font-semibold">{sa.name}</div></div>
         </div>
         <p className="text-sm leading-relaxed">{recap.body}</p>
+        {recap.audio && <Listen src={recap.audio} />}
         <div className="space-y-2.5">
           <Compare label="Possession %" h={sh.possession_pct} a={sa.possession_pct} />
           <Compare label="Shots" h={sh.shots} a={sa.shots} />

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import itertools
 import json
 import math
@@ -114,8 +115,8 @@ _RIVERSIDE_TEAMS: Dict[str, Dict] = {
         "numbers": [1, 2, 4, 5, 3, 6, 8, 10, 14, 7, 9],
         "slots": [  # 4-1-4-1
             ((5, 50), (16, 50)),
-            ((30, 86), (52, 84)), ((24, 62), (34, 62)), ((24, 38), (34, 38)), ((30, 14), (52, 16)),
-            ((40, 50), (48, 50)),
+            ((28, 86), (52, 84)), ((24, 62), (34, 62)), ((24, 38), (34, 38)), ((28, 14), (52, 16)),
+            ((42, 50), (48, 50)),
             ((62, 86), (78, 88)), ((56, 62), (66, 60)), ((56, 38), (66, 40)), ((62, 14), (78, 12)),
             ((78, 50), (88, 50)),
         ],
@@ -288,6 +289,7 @@ def _kickoff_shape(pos, kicker_team: int, carrier: int):
 
 
 _XM, _YM = 1.05, 0.68  # metres per pitch unit along x (105 m) and y (68 m)
+_BLOCK_SPAN = 40.0  # out of possession, back line to front line in pitch units (about 42 m)
 _MIN_GAP_M = 4.5  # teammates further apart than this in open play (away from set pieces and walls)
 
 # Set-piece spots as (distance from the goal line being attacked, y), written for a corner from the low-y side and
@@ -357,6 +359,149 @@ def _place(out, players, spots, gx, gy) -> None:
         out[i] = [gx(g), gy(y)]
 
 
+def _offside(out, bx: float, carrier) -> None:
+    """Nobody beyond the second-last opponent (or the ball) in the opponents' half (IFAB Law 11); clamped attackers
+    stay staggered, keeping their order, rather than forming a flat line."""
+    xs1 = sorted((p[0] for p in out[11:]), reverse=True)
+    xs0 = sorted(p[0] for p in out[:11])
+    lim0 = max(50.0, bx, xs1[1])
+    lim1 = min(50.0, bx, xs0[1])
+    off0 = sorted((i for i in range(1, 11) if i != carrier and out[i][0] > lim0), key=lambda i: -out[i][0])
+    for rank, i in enumerate(off0):
+        out[i][0] = lim0 - 0.4 - 1.5 * rank
+    off1 = sorted((i for i in range(12, 22) if i != carrier and out[i][0] < lim1), key=lambda i: out[i][0])
+    for rank, i in enumerate(off1):
+        out[i][0] = lim1 + 0.4 + 1.5 * rank
+
+
+_DEAD = {"corner", "penalty", "free_kick", "throw_in", "goal_kick", "kickoff", "keeper_hold", "stoppage"}
+_ACCEL = 4.0  # m/s per second
+_WANDER_M = (5.5, 4.0)  # off-ball movement amplitude (x, y), metres
+_PASS_MS = 16.0  # ball speed of a pass or clearance, m/s
+RESTART_LIMITS = {"throw_in": 5.0, "goal_kick": 5.0, "keeper_hold": 8.0}  # PL 2026/27 handbook, seconds
+
+
+def _motion(keys, vmax, first: str, seed: int):
+    """Turn the step-by-step snapshots (one every 3-8 s) into 1-second movement.
+
+    Between two snapshots each player runs towards the next snapshot's spot with their own top speed and a
+    limited acceleration, plus a little off-ball movement, so nobody glides 20 m in a second or stands frozen.
+    The ball moves with its holder and then travels at pass speed to the receiver; attackers aim to stay on the
+    last defender's shoulder; on a dead ball everyone waits until it is played. Open-play snapshots are rewritten
+    with the simulated positions; dead-ball ones (set pieces, kick-offs) keep their exact shapes because the
+    stoppage gives players time to get there.
+
+    Returns (frames, restarts): new (t, meta) frames, and (t_out, team, kind, seconds) for each timed restart."""
+    xy = lambda p: [p[0] * _XM, p[1] * _YM]  # noqa: E731
+    pu = lambda m: [round(m[0] / _XM, 1), round(m[1] / _YM, 1)]  # noqa: E731
+    lerp = lambda p, q, a: [p[0] + (q[0] - p[0]) * a, p[1] + (q[1] - p[1]) * a]  # noqa: E731
+    wr = random.Random(seed * 7 + 3)
+    wander = [(wr.uniform(14, 26), wr.uniform(17, 31), wr.uniform(0, 6.3), wr.uniform(0, 6.3)) for _ in range(22)]
+
+    def drift(i, t):  # checking runs and small adjustments off the ball, zero on average (metres)
+        px, py, ax, ay = wander[i]
+        k = 0.3 if i % 11 == 0 else 1.0
+        return (k * _WANDER_M[0] * math.sin(2 * math.pi * t / px + ax), k * _WANDER_M[1] * math.sin(2 * math.pi * t / py + ay))
+
+    def slot(m):
+        h = m["holder"]
+        return None if not h else (0 if h[0] == first else 11) + h[1]
+
+    S = [xy(p) for p in keys[0].meta["pos"]]
+    V = [[0.0, 0.0] for _ in range(22)]
+    frames, restarts, dead_since = [], [], None
+    for k0, k1 in zip(keys, keys[1:]):
+        m0, m1, t0, t1 = k0.meta, k1.meta, k0.t, k1.t
+        h0, h1 = slot(m0), slot(m1)
+        same_stop = m1["phase"] == m0["phase"] and m1["poss"] == m0["poss"] and t1 - t0 < 3  # one stoppage, two frames
+        dead0, into_dead = m0["phase"] in _DEAD, m1["phase"] in _DEAD and not same_stop
+        b0, b1 = xy(m0["ball"]), xy(m1["ball"])
+        carry = h0 is not None and h0 == h1
+        flight = 0.0 if carry else _clamp(math.dist(b0, b1) / _PASS_MS, 0.5, 2.0)
+        release = max(t0, t1 - flight)
+        if dead0 and dead_since is None:
+            dead_since = (t0, m0["poss"], m0["phase"])
+        if dead0 and not same_stop:  # this restart is taken at `release`
+            st, team, kind = dead_since
+            if kind in RESTART_LIMITS:
+                restarts.append((st, team, kind, round(release - st, 1)))
+            dead_since = None
+        start, ball, rel_pt = [p[:] for p in S], b0, None
+        ts = t0 + 1.0
+        while ts < t1 - 0.3:
+            h = None
+            if into_dead:  # the ball goes dead: players walk or jog to the set-piece spots meanwhile
+                a = (ts - t0) / (t1 - t0)
+                S = [lerp(p, xy(q), a) for p, q in zip(start, m1["pos"])]
+                ph = "stoppage" if t1 - t0 > 30 else "open"  # a long stoppage (goal, VAR) is not open play
+                ball, hold, poss, conf = lerp(b0, b1, a), None, m0["poss"], 0.0
+            elif dead0 and ts < release:  # everyone waits for the restart
+                ball, ph, hold, poss, conf, h = b0, m0["phase"], m0["holder"], m0["poss"], m0["conf"], h0
+            else:
+                in_air = not carry and ts >= release
+                h = h1 if in_air else h0
+                bx_u = (ball[0]) / _XM
+                xs0 = sorted(S[i][0] / _XM for i in range(11))
+                xs1 = sorted((S[i][0] / _XM for i in range(11, 22)), reverse=True)
+                line0, line1 = max(50.0, bx_u, xs1[1]), min(50.0, bx_u, xs0[1])
+                left = max(t1 - ts + 1.0, 1.0)
+                sep = [[0.0, 0.0] for _ in range(22)]  # teammates closer than _MIN_GAP_M ease apart
+                for tm in (0, 11):
+                    for a in range(tm, tm + 11):
+                        for b in range(a + 1, tm + 11):
+                            dx, dy = S[a][0] - S[b][0], S[a][1] - S[b][1]
+                            d = math.hypot(dx, dy)
+                            if d < _MIN_GAP_M:
+                                ux, uy = (dx / d, dy / d) if d > 1e-6 else (0.0, 1.0)
+                                push = (_MIN_GAP_M - d) * 0.6
+                                sep[a][0] += ux * push; sep[a][1] += uy * push
+                                sep[b][0] -= ux * push; sep[b][1] -= uy * push
+                for i in range(22):
+                    if i == h0 and not in_air:
+                        tx, ty = (b1 if carry else b0)  # the holder dribbles on, or stays on the ball before passing
+                    elif i == h1 and in_air:
+                        tx, ty = b1  # the receiver goes to meet the ball
+                    else:
+                        dx, dy = drift(i, ts)
+                        tx, ty = xy(m1["pos"][i])
+                        tx, ty = tx + dx + sep[i][0] * left, ty + dy + sep[i][1] * left
+                        if i % 11:  # attackers aim for the last defender's shoulder, never beyond it
+                            tx = min(tx, (line0 - 0.5) * _XM) if i < 11 else max(tx, (line1 + 0.5) * _XM)
+                    dvx, dvy = (tx - S[i][0]) / left, (ty - S[i][1]) / left
+                    offside_now = i % 11 and (S[i][0] / _XM > line0 if i < 11 else S[i][0] / _XM < line1)
+                    if i in (h0, h1) or offside_now:  # ball players and attackers caught offside hurry
+                        dvx, dvy = tx - S[i][0], ty - S[i][1]  # ball players go straight there, as fast as they can
+                    sp = math.hypot(dvx, dvy)
+                    if sp > vmax[i]:
+                        dvx, dvy = dvx * vmax[i] / sp, dvy * vmax[i] / sp
+                    ax, ay = dvx - V[i][0], dvy - V[i][1]
+                    acc = math.hypot(ax, ay)
+                    if acc > _ACCEL:
+                        ax, ay = ax * _ACCEL / acc, ay * _ACCEL / acc
+                    V[i] = [V[i][0] + ax, V[i][1] + ay]
+                    S[i] = [_clamp(S[i][0] + V[i][0], -3, 108), _clamp(S[i][1] + V[i][1], -3, 71)]
+                if not in_air:
+                    ball = S[h0][:] if h0 is not None else lerp(b0, b1, (ts - t0) / (t1 - t0))
+                else:
+                    rel_pt = rel_pt or ball
+                    ball = lerp(rel_pt, b1, min((ts - release) / flight, 1.0))
+                ph = "open" if in_air or not dead0 else m0["phase"]
+                hold = m1["holder"] if in_air else m0["holder"]
+                poss = m1["poss"] if in_air else m0["poss"]
+                conf = min(m1["conf"], 0.6) if in_air else m0["conf"]
+            frames.append((round(ts, 1), {"phase_conf": m0["phase_conf"] if ph == m0["phase"] else 1.0,
+                                          "pos": [pu(p) for p in S], "ball": pu(ball), "poss": poss,
+                                          "holder": hold, "conf": round(conf, 2), "phase": ph}))
+            ts += 1.0
+        if m1["phase"] in _DEAD or t1 - t0 > 30:  # set pieces and kick-offs keep their exact shape
+            S, V = [xy(p) for p in m1["pos"]], [[0.0, 0.0] for _ in range(22)]
+        else:  # open play: the snapshot shows where the simulated players really are
+            if h1 is not None:
+                S[h1] = b1[:]
+            m1["pos"] = [pu(p) for p in S]
+    return frames, restarts
+
+
 def _realism(pos, poss_idx: int, ball, ph: str, carrier: int):
     """Make the 22 positions obey football logic. All values are 0-100 pitch units, team 0 attacks +x.
 
@@ -424,6 +569,51 @@ def _realism(pos, poss_idx: int, ball, ph: str, carrier: int):
             k = min(over) if over else 1.0  # then squeeze proportionally, so lines keep their order and ratios
             for i in idx:
                 out[i][0] = back(t, d0 + (us[i] - shift - d0) * k)
+        us = [u(t, out[i][0]) for i in idx]  # a defending block is compact: back line to front line at most ~42 m
+        d0, span = min(us), max(us) - min(us)
+        if span > _BLOCK_SPAN:
+            for i, cu in zip(idx, us):
+                out[i][0] = back(t, d0 + (cu - d0) * _BLOCK_SPAN / span)
+
+    for t in (0, 1):  # outfield players defend from the six-yard line, not on the goal line: squeeze 0-8 into 5-8
+        for i in range(t * 11 + 1, t * 11 + 11):
+            cu = u(t, out[i][0])
+            if cu < 8 and i != carrier:
+                out[i][0] = back(t, 5 + cu * 3 / 8)
+
+    bu = u(att, bx)
+    if bu >= 65 and ph == "open":  # final third: the front three join the attack and narrow towards the box
+        for rank, i in enumerate(sorted(att_out, key=lambda i: -u(att, out[i][0]))[:3]):
+            cu = u(att, out[i][0])
+            out[i] = [back(att, max(cu, min(bu - 4 - 4 * rank, 90))), 50 + (out[i][1] - 50) * 0.75]
+
+    for t in (0, 1):  # keepers: on the line between ball and goal centre, higher (sweeping) when their team has it
+        k = t * 11
+        if k == carrier:
+            continue
+        bu = u(t, bx)
+        if t == poss_idx:
+            g, ky = _clamp(4 + 0.18 * bu, 4, 22), 50 + (by - 50) * 0.1
+        else:
+            g, ky = _clamp(1.5 + 0.1 * bu, 1.5, 9), 50 + (by - 50) * (0.2 if bu < 40 else 0.08)
+        out[k] = [back(t, g), ky]
+
+    if ph == "goal_kick":  # centre-backs split to the corners of the box, opponents wait outside the area
+        kt = poss_idx
+        own = 0.0 if kt == 0 else 100.0
+        go = lambda g: own + g if kt == 0 else own - g  # noqa: E731
+        cbs = sorted((i for i in range(kt * 11 + 1, kt * 11 + 11) if i != carrier), key=lambda i: u(kt, out[i][0]))[:2]
+        _place(out, cbs, [(13, 24), (13, 76)], go, lambda y: y)
+        for i in dfn_out:
+            if u(kt, out[i][0]) < 17.5 and 18 < out[i][1] < 82:
+                out[i][0] = go(17.5 + (i % 3) * 1.5)
+    elif ph == "throw_in":  # two short options: one down the line, one infield
+        inside = 1.0 if by < 50 else -1.0
+        fwd = 1.0 if att == 0 else -1.0
+        mates = sorted(att_out, key=lambda i: _dist_m(out[i], (bx, by)))[:2]
+        spots = [(bx + fwd * 8, by + inside * 6), (bx - fwd * 3, by + inside * 18)]
+        for i, (sx, sy) in zip(mates, spots):
+            out[i] = [_clamp(sx, 2, 98), _clamp(sy, 2, 98)]
 
     fixed = {carrier}
     if ph == "free_kick":
@@ -456,18 +646,7 @@ def _realism(pos, poss_idx: int, ball, ph: str, carrier: int):
         _spread(out, fixed, min_m=2.5)
         _keep_out(out, [i for i in dfn_out if i not in fixed], (bx, by), 9.15, goal=end)
 
-    # offside: nobody beyond the second-last opponent (or the ball) in the opponents' half; clamped attackers
-    # stay staggered (keeping their order) rather than forming a flat line
-    xs1 = sorted((p[0] for p in out[11:]), reverse=True)
-    xs0 = sorted(p[0] for p in out[:11])
-    lim0 = max(50.0, bx, xs1[1])
-    lim1 = min(50.0, bx, xs0[1])
-    off0 = sorted((i for i in range(1, 11) if i != carrier and out[i][0] > lim0), key=lambda i: -out[i][0])
-    for rank, i in enumerate(off0):
-        out[i][0] = lim0 - 0.4 - 1.5 * rank
-    off1 = sorted((i for i in range(12, 22) if i != carrier and out[i][0] < lim1), key=lambda i: out[i][0])
-    for rank, i in enumerate(off1):
-        out[i][0] = lim1 + 0.4 + 1.5 * rank
+    _offside(out, bx, carrier)
     if ph != "free_kick":
         _spread(out, fixed)  # sideways only, so it cannot undo the offside picture
     return out
@@ -569,12 +748,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
     def slot_of(team: str, name: str) -> Optional[int]:
         return next((i for i, (n, _) in enumerate(roster[team]) if n == name), None)
 
-    def track(t_, poss_, x_, y_, ph="open", phc=1.0, loose=False, taker=None):
-        """One tracking frame. holder/conf/phase say who has the ball and what kind of play it is;
-        conf is lower when the ball is contested, plus a deterministic *simulated* tracker
-        occlusion so consumers must handle uncertain frames."""
-        if not tracking:
-            return
+    def frame_at(t_, poss_, x_, y_, ph="open", taker=None):
+        """All 22 positions at a moment (absolute frame) plus who is on the ball."""
         bx, by = (x_, y_) if poss_ == codes[0] else (100 - x_, 100 - y_)
         pos, info = _frame_positions(codes, t_, poss_, x_, y_, teams,
                                      slot_of(poss_, taker) if taker else None)
@@ -583,10 +758,34 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         else:
             pos = [[round(px, 1), round(py, 1)] for px, py in
                    _realism(pos, codes.index(poss_), (bx, by), ph, codes.index(poss_) * 11 + info["carrier"])]
+        return pos, info, (bx, by)
+
+    def at_ball(t_, poss_, x_, y_, exclude=None):
+        """Names follow the geometry: (player on the ball, nearest opponent) at that moment. `exclude` skips one
+        slot of the team on the ball (a pass is never received by the passer)."""
+        pos, info, b = frame_at(t_, poss_, x_, y_)
+        pi = codes.index(poss_)
+        mine = sorted(range(11), key=lambda k: _dist_m(pos[pi * 11 + k], b))
+        k = info["carrier"] if info["carrier"] != exclude else next(k for k in mine if k != exclude)
+        near = min(range(11), key=lambda k: _dist_m(pos[(1 - pi) * 11 + k], b))
+        return roster[poss_][k][0], roster[other[poss_]][near][0], k
+
+    def track(t_, poss_, x_, y_, ph="open", phc=1.0, loose=False, taker=None, runner=None, run_k=0.0):
+        """One tracking frame. holder/conf/phase say who has the ball and what kind of play it is;
+        conf is lower when the ball is contested, plus a deterministic *simulated* tracker
+        occlusion so consumers must handle uncertain frames."""
+        if not tracking:
+            return
+        pos, info, (bx, by) = frame_at(t_, poss_, x_, y_, ph, taker)
+        r = slot_of(poss_, runner) if runner and runner != taker else None
+        if r is not None:  # a scripted scorer making a run towards the penalty spot
+            k = codes.index(poss_) * 11 + r
+            gx_ = 86.0 if poss_ == codes[0] else 14.0
+            pos[k] = [round(pos[k][0] + (gx_ - pos[k][0]) * run_k, 1), round(pos[k][1] + (46 - pos[k][1]) * run_k, 1)]
         if ph in ("throw_in", "corner"):  # the taker stands just outside the line, the ball sits on it
             k = codes.index(poss_) * 11 + info["carrier"]
-            pos[k] = ([bx, -2.0 if by < 50 else 102.0] if ph == "throw_in"
-                      else [bx + (1.6 if bx > 50 else -1.6), by + (-2.0 if by < 50 else 2.0)])
+            pos[k] = ([round(bx, 1), -2.0 if by < 50 else 102.0] if ph == "throw_in"
+                      else [round(bx + (1.6 if bx > 50 else -1.6), 1), by + (-2.0 if by < 50 else 2.0)])
         occluded = (math.sin(t_ * 12.9898) * 43758.5453) % 1.0 < 0.18
         if loose:
             holder, conf = None, 0.0
@@ -600,6 +799,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
              holder=holder, conf=round(conf, 2), phase=ph, phase_conf=phc)
 
     t, poss, x, y, pressured = 0.0, codes[0], 50.0, 50.0, False
+    carries: List[Tuple[Event, int]] = []  # (carry event, player index in the frame) to time from tracking
     score = {c: 0 for c in codes}
     emit(0, "kickoff", poss, pick(poss, 50), 50, 50)
     track(0.0, poss, x, y)
@@ -623,6 +823,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             t = tt + 40
             track(t, poss, x, y, "kickoff")
         elif kind in ("goal", "disallowed"):
+            for dt, bx_, k in ((9, 58, 0.35), (6, 65, 0.7), (3, 72, 0.95)):  # build-up: the scorer runs into the box
+                track(tt - dt, att, bx_, 52, taker=item.get("assist") or item["scorer"], runner=item["scorer"], run_k=k)
             if item.get("assist"):
                 emit(tt - 3, "pass", att, item["assist"], 72, 52, "complete", receiver=item["scorer"],
                      distance_m=24.0, difficulty=0.55, speed_kmh=55)
@@ -676,7 +878,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                 out_name = roster[c][slot][0]
                 roster[c][slot] = (sub_name, sub_pos)
                 emit(when, "substitution", c, sub_name, 50, 50, sub_idx=idx, slot=slot, number=number, player_out=out_name)
-        while script and script[0]["t"] <= t:
+        while script and script[0]["t"] - 12 <= t:  # 12 s early, so scripted goals get their build-up frames
             run_script(script.pop(0))
         opp = other[poss]
         boost = {c: 0.45 if any(s <= t < e and tm == c for s, e, tm in phases) else 0.0
@@ -685,9 +887,13 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         p_lose = _clamp(0.11 * dfn / att, 0.05, 0.3)
         r = rng.random()
         ph, phc, loose = "open", 1.0, False
+        hold = None  # who the next frame shows on the ball, when an event names them
 
+        # Names come from the positions of that moment (pick() still runs so the random stream, and with it the
+        # match, stays the same as before).
         if x >= 72 and rng.random() < (scen.get("shot_rate", 0.09) if scen else 0.09):
-            shooter = pick(poss, x)
+            pick(poss, x)
+            shooter = at_ball(t, poss, x, y)[0]
             dist = math.hypot((100 - x) * 1.05, (y - 50) * 0.68)
             xg = round(_clamp(0.65 * math.exp(-dist / 11.0) * ((min(att, 1.1) if scen else att) / 1.0) ** 0.5, 0.02, 0.8), 2)
             u = rng.random()
@@ -711,45 +917,53 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                 ph, phc = "corner", 0.62
             else:
                 x, y = 8.0, 50.0
-                emit(t, "possession_change", poss, pick(poss, 8), x, y, cause="shot_" + outcome)
+                pick(poss, 8)
+                emit(t, "possession_change", poss, at_ball(t, poss, x, y)[0], x, y, cause="shot_" + outcome)
                 if outcome == "off_target":
                     emit(t, "restart", poss, "", x, y, kind="goal_kick")
                     ph, phc = "goal_kick", 0.95
                 elif outcome == "saved":
                     ph, phc = "keeper_hold", 0.95
         elif r < p_lose:
-            tackler = pick(opp, 100 - x)
+            pick(opp, 100 - x)
+            tackler = at_ball(t, poss, x, y)[1]
             kind = "tackle" if rng.random() < 0.6 else "interception"
             emit(t, kind, opp, tackler, 100 - x, 100 - y, "won")
             poss, x, y, pressured = opp, 100 - x, 100 - y, False
             emit(t, "possession_change", poss, tackler, x, y, cause=kind)
+            hold = tackler
             loose = True  # the ball is up for grabs for a moment
         elif r < p_lose + 0.12 * (0.4 + teams[opp]["tactic"]["press"]):
-            emit(t, "pressure", opp, pick(opp, 100 - x), 100 - x, 100 - y,
+            pick(opp, 100 - x)
+            emit(t, "pressure", opp, at_ball(t, poss, x, y)[1], 100 - x, 100 - y,
                  intensity=round(rng.uniform(0.3, 1.0), 2))
             pressured = True
         elif rng.random() < 0.15:
-            carrier = pick(poss, x)
+            pick(poss, x)
+            carrier, _, cslot = at_ball(t, poss, x, y)
             dx = _clamp(rng.gauss(6, 4), 0, 20)
-            speed = round(_clamp(rng.gauss(24, 5), 12, 36), 1)
+            speed = round(_clamp(rng.gauss(24, 5), 12, 36), 1)  # replaced by the measured speed when tracking
             emit(t, "carry", poss, carrier, x, y, "", speed_kmh=speed,
                  distance_m=round(dx * 1.05, 1))
-            x = _clamp(x + dx, 2, 98)
+            carries.append((events[-1], codes.index(poss) * 11 + cslot))
+            x, hold = _clamp(x + dx, 2, 98), carrier
         else:
-            passer = pick(poss, x)
+            pick(poss, x)
+            passer, _, passer_slot = at_ball(t, poss, x, y)
             dx = rng.gauss(26, 8) if rng.random() < teams[poss]["tactic"]["long"] else rng.gauss(8, 9)
             nx, ny = _clamp(x + dx, 2, 98), _clamp(y + rng.gauss(0, 14), 4, 96)
             dist = math.hypot((nx - x) * 1.05, (ny - y) * 0.68)
             difficulty = _clamp(0.1 + dist / 60 + (0.25 if pressured else 0)
                                 + (0.15 if nx > 70 else 0), 0, 1)
             p_ok = _clamp(1.0 - difficulty * 0.4 + (strength[poss] - 1) * 0.2, 0.2, 0.97)
-            receiver = pick(poss, nx)
+            pick(poss, nx)
+            receiver = at_ball(t, poss, nx, ny, exclude=passer_slot)[0]
             ok = rng.random() < p_ok
             emit(t, "pass", poss, passer, x, y, "complete" if ok else "incomplete",
                  receiver=receiver, distance_m=round(dist, 1), difficulty=round(difficulty, 2), ex=round(nx, 1), ey=round(ny, 1),
                  speed_kmh=round(rng.uniform(35, 75) if dist > 20 else rng.uniform(20, 45), 0))
             if ok:
-                x, y = nx, ny
+                x, y, hold = nx, ny, receiver
             elif ny < 7 or ny > 93:  # ran out over the touchline: throw-in to the other side
                 poss, x, y = opp, 100 - nx, (100.0 if ny < 50 else 0.0)  # on the touchline
                 emit(t, "possession_change", poss, "", x, y, cause="out_of_play")
@@ -757,9 +971,10 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                 ph, phc = "throw_in", 0.92
             else:
                 poss, x, y = opp, 100 - nx, 100 - ny
-                emit(t, "possession_change", poss, pick(poss, x), x, y, cause="turnover")
+                pick(poss, x)
+                emit(t, "possession_change", poss, at_ball(t, poss, x, y)[0], x, y, cause="turnover")
             pressured = False
-        track(t, poss, x, y, ph, phc, loose)
+        track(t, poss, x, y, ph, phc, loose, taker=hold)
 
     # Discipline layer from its own RNG so the match flow above is untouched: some pressure events are
     # fouls (free kick to the other side, occasionally a yellow card) and some failed final-third passes offside.
@@ -770,14 +985,41 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         if e.type == "pressure" and frng.random() < 0.22 and not in_box:
             emit(e.t, "foul", e.team, e.player, e.x, e.y, against=other[e.team])
             emit(e.t + 0.1, "restart", other[e.team], "", 100 - e.x, 100 - e.y, kind="free_kick")
-            for dt in (0.6, 2.4):  # set-up frames (wall, 9.15 m) before play resumes; the next step is 3+ s later
-                if e.t + dt < duration:
-                    track(e.t + dt, other[e.team], 100 - e.x, 100 - e.y, "free_kick", 0.9)
+            if e.t + 2.5 < duration:  # set-up frame (wall, 9.15 m) before play resumes; the next step is 3+ s later
+                track(e.t + 2.5, other[e.team], 100 - e.x, 100 - e.y, "free_kick", 0.9)
             if frng.random() < 0.13 and yellows[e.team] < 4 and not scen:
                 yellows[e.team] += 1
                 emit(e.t + 0.2, "card", e.team, e.player, e.x, e.y, card="yellow")
-        elif e.type == "pass" and e.outcome == "incomplete" and e.x >= 62 and frng.random() < 0.09:
-            emit(e.t, "offside", e.team, e.meta.get("receiver", ""), e.x, e.y)
+        elif e.type == "pass" and e.outcome == "incomplete" and e.x >= 62 and frng.random() < 0.3:
+            # offside only when the geometry allows it: the intended receiver was on the last defender's shoulder
+            pos, _, (bx, by) = frame_at(e.t, e.team, e.x, e.y)
+            ti = codes.index(e.team)
+            k = slot_of(e.team, e.meta.get("receiver", ""))
+            them = sorted((p[0] for p in pos[(1 - ti) * 11:(1 - ti) * 11 + 11]), reverse=ti == 0)
+            line = max(50.0, bx, them[1]) if ti == 0 else min(50.0, bx, them[1])
+            if k is not None and abs(pos[ti * 11 + k][0] - line) <= 3.0:
+                emit(e.t, "offside", e.team, e.meta["receiver"], e.x, e.y, line_x=round(line, 1))
+
+    if tracking:  # 1-second movement between the snapshots, plus how long each timed restart took
+        keys = sorted((e for e in events if e.type == "tracking"), key=lambda ev: (ev.t, ev.id))
+        vrng = random.Random(seed * 31 + 5)
+        vmax = [6.0 if i % 11 == 0 else vrng.uniform(7.4, 9.2) for i in range(22)]  # top speed, m/s
+        frames, restarts = _motion(keys, vmax, codes[0], seed)
+        for t_, m in frames:
+            bx_, by_ = m["ball"] if m["poss"] == codes[0] else (100 - m["ball"][0], 100 - m["ball"][1])
+            emit(t_, "tracking", m["poss"], "", bx_, by_, **m)
+        allf = sorted(((e.t, e.meta) for e in events if e.type == "tracking"), key=lambda f: f[0])
+        times = [f[0] for f in allf]
+        for ce, k in carries:  # a carry's speed is what the tracking shows for that run, not a guess
+            lo, hi = bisect.bisect_left(times, ce.t - 9), bisect.bisect_right(times, ce.t + 0.1)
+            seg = allf[lo:hi]
+            sp = [math.hypot((b["pos"][k][0] - a["pos"][k][0]) * _XM, (b["pos"][k][1] - a["pos"][k][1]) * _YM) / (tb - ta)
+                  for (ta, a), (tb, b) in zip(seg, seg[1:]) if 0.5 <= tb - ta <= 1.5]
+            sp = [v for v in sp if v <= 9.5]  # faster is a jump in the data, not running
+            if sp:
+                ce.meta["speed_kmh"] = round(max(sp) * 3.6, 1)
+        for st, team, kind, secs in restarts:
+            emit(st + secs, "restart_taken", team, "", 50, 50, kind=kind, secs=secs, limit=RESTART_LIMITS[kind])
 
     emit(duration, "fulltime", poss, "", x, y, score=dict(score))
     events.sort(key=lambda ev: (ev.t, ev.id))
