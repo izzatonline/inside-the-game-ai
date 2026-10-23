@@ -70,6 +70,13 @@ class PlayerStats:
     fast: bool = False  # currently above HIGH_SPEED_KMH (a run is counted once, when it starts)
 
 
+VAR_STAGE = {  # where a VAR review stands, in words for the writers
+    "goal_check": "VAR is checking a possible goal; no decision yet",
+    "goal_stands": "after the VAR check the goal stands",
+    "no_goal": "after the VAR check the goal is ruled out; it does not count",
+    "penalty_check": "VAR is checking for a possible penalty; no decision yet",
+    "penalty_awarded": "VAR has awarded a penalty; it has not been taken yet",
+}
 RESTART_CONFIRM_S = 10.0  # a restart event confirms frames of the same restart this many seconds after it
 
 
@@ -148,6 +155,14 @@ class MatchState:
             return max(conf, 0.97)
         return conf
 
+    def _standing(self) -> Dict[str, str]:
+        """Who leads after this moment, in words (empty when level), so writers cannot get it backwards."""
+        h, a = (self.teams[c] for c in self.codes)
+        if h.goals == a.goals:
+            return {"leader": "", "trailer": ""}
+        lead, trail = (h, a) if h.goals > a.goals else (a, h)
+        return {"leader": lead.name, "trailer": trail.name}
+
     def _restart_watch(self, ev: Event) -> List[Moment]:
         """Restart Watch: how long each throw-in, goal kick and keeper hold took, against the Premier League
         2026/27 handbook limits (throw-in and goal kick 5 s, keeper 8 s). Neutral: it reports, it does not judge."""
@@ -225,21 +240,26 @@ class MatchState:
                                   "score_home": self.teams[home].goals, "score_away": self.teams[away].goals})
             return [self._moment(
                 ev, "goal", 1.0, ev.player, ev.team, own_goal=True, against_run=False,
-                scoring_team=self.teams[ev.team].name, player_team=self.teams[self._opp(ev.team)].name,
+                scoring_team=self.teams[ev.team].name, player_team=self.teams[self._opp(ev.team)].name, **self._standing(),
                 score_home=self.teams[home].goals, score_away=self.teams[away].goals,
                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-{self.teams[away].goals} {self.teams[away].name}",
                 pressure_pct=int(round(self.pressure_share(ev.team) * 100)))]
         if ev.type == "var":
             home, away = self.codes
             return [self._moment(ev, "var", 0.9 if ev.meta["kind"] in ("no_goal", "penalty_awarded") else 0.7,
-                                 ev.player or None, ev.team, var_kind=ev.meta["kind"],
-                                 score_home=self.teams[home].goals, score_away=self.teams[away].goals)]
+                                 ev.player or None, ev.team, var_kind=ev.meta["kind"], decision=VAR_STAGE[ev.meta["kind"]],
+                                 score_home=self.teams[home].goals, score_away=self.teams[away].goals, **self._standing())]
         if ev.type == "substitution":
             self.tactics.rosters[ev.team][ev.meta["slot"]] = ev.player  # roles now belong to the new player
             self.sub_log.append({"minute": ev.minute, "team": ev.team, "slot": ev.meta["slot"], "player_in": ev.player,
                                  "player_out": ev.meta["player_out"], "number": ev.meta["number"]})
             return [self._moment(ev, "substitution", 0.6, ev.player, ev.team,
                                  player_in=ev.player, player_out=ev.meta["player_out"])]
+        if ev.type == "halftime":
+            home, away = self.codes
+            return [self._moment(ev, "half_time", 0.95, None, home, score_home=self.teams[home].goals,
+                                 score_away=self.teams[away].goals,
+                                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-{self.teams[away].goals} {self.teams[away].name}")]
         if ev.type in ("kickoff", "fulltime"):
             return out
         ts = self.teams[ev.team]
@@ -344,7 +364,7 @@ class MatchState:
                 scoreline=f"{self.teams[home].name} {self.teams[home].goals}-"
                           f"{self.teams[away].goals} {self.teams[away].name}",
                 assist=assist, player_goals=ps.goals, penalty=bool(ev.meta.get("penalty")),
-                scoring_team=ts.name, player_team=ts.name,
+                scoring_team=ts.name, player_team=ts.name, **self._standing(),
                 pressure_pct=int(round(share * 100)), against_run=share < 0.35,
             )]
         if xg >= 0.25 and ev.outcome != "disallowed":

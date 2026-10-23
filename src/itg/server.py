@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .agents import MatchPipeline
 from .bus import Broadcaster, make_source
-from .generator import DEFAULT_MATCH, MATCHES, MatchSpec, generate_match
+from .generator import DEFAULT_MATCH, HALF_T, MATCHES, MatchSpec, generate_match
 from .llm import get_llm
 from . import speech
 from .models import Profile
@@ -57,8 +57,14 @@ def _roster(spec: MatchSpec):
 
 
 def _frame_chunk(ev, state) -> str:
-    return _sse("frame", {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase")}
-                | {"phase_conf": state.phase_conf(ev), "t": ev.t})
+    """One tracking frame for the pitch. The data keeps one orientation (first team attacks +x); from half time the
+    teams switch ends on the pitch, so second-half frames are turned round (x, y -> 100 - x, 100 - y)."""
+    d = {k: ev.meta[k] for k in ("pos", "ball", "poss", "holder", "conf", "phase")}
+    half = 2 if ev.t >= HALF_T else 1
+    if half == 2:
+        d["pos"] = [[round(100 - x, 1), round(100 - y, 1)] for x, y in d["pos"]]
+        d["ball"] = [round(100 - d["ball"][0], 1), round(100 - d["ball"][1], 1)]
+    return _sse("frame", d | {"phase_conf": state.phase_conf(ev), "t": ev.t, "half": half})
 
 
 async def _step(pipe, ev, profile, last_stats: float, frames: bool = True, stats_every: float = 10.0):

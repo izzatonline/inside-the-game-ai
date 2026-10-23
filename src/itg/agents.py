@@ -47,6 +47,13 @@ _MISS = {"en": r"\b(miss(es|ed)?|chances?|wide|saved|over the bar|shoots? high|f
          "pt": r"\b(perd\w*|chance|desperdi\w*)\b"}
 _LEVEL = {"en": r"\b(level(s|led|ler)?|equali[sz]\w*|all square)\b", "es": r"\b(empat\w*|igual\w*)\b",
           "ms": r"\b(menyamakan|seri)\b", "fr": r"\b(égalis\w*)\b", "pt": r"\b(empat\w*|igual\w*)\b"}
+_SCORED = {"en": r"\b(scores?|scored|nets?|netted|converts?|converted|slots?|wins? it|goal stands|goal for)\b",
+           "es": r"\b(marca|marcó|anota\w*|convierte|gol de)\b", "ms": r"\b(menjaring|jaringkan|gol untuk)\b",
+           "fr": r"\b(marque|inscrit|but pour)\b", "pt": r"\b(marca|marcou|converte\w*|gol de)\b"}
+_REVIEW = {"en": r"\b(var|check\w*|review\w*)\b", "es": r"\b(var|revisi[oó]n|revisa\w*)\b", "ms": r"\b(var|semakan|semak)\b",
+           "fr": r"\b(var|vérif\w*|examen)\b", "pt": r"\b(var|revis\w*)\b"}
+_LEADS = {"en": r"(ahead|lead(s|ing)?|in front)", "es": r"(ventaja|delante|lidera\w*|adelanta\w*)",
+          "ms": r"(mendahului|di hadapan)", "fr": r"(devant|mène|en tête)", "pt": r"(frente|lidera\w*|vantagem)"}
 _OWN = {"en": r"own goal|own net", "es": r"autogol|en propia", "ms": r"gol sendiri", "fr": r"contre son camp", "pt": r"gol contra|autogolo"}
 
 
@@ -56,9 +63,22 @@ def meaning_problems(m: Moment, lang: str, headline: str, body: str) -> List[str
     words = re.findall(r"\w+", headline.lower())
     if words and max(words.count(w) for w in words) >= 3:
         return ["the headline repeats the same word; write a real headline"]
-    if m.kind != "goal" or lang not in _GOAL:
+    if lang not in _GOAL or m.kind not in ("goal", "var"):
         return []
     text, head, out = f"{headline} {body}", headline, []
+    if m.kind == "var":  # a check is not a decision, and an awarded penalty has not been scored yet
+        vk = f.get("var_kind")
+        if vk in ("goal_check", "penalty_check", "penalty_awarded", "no_goal") and re.search(_SCORED[lang], text, re.I):
+            out.append(f"it says someone scored, but {f.get('decision', 'this is a VAR review')}")
+        if vk in ("goal_check", "penalty_check") and not re.search(_REVIEW[lang], text, re.I):
+            out.append("it must say that VAR is checking")
+        return out
+    if re.search(_LEADS[lang], text, re.I):
+        lead, trail = f.get("leader"), f.get("trailer")
+        if not lead:
+            out.append("it says a team leads, but the score is level")
+        elif trail and re.search(rf"\b{re.escape(trail.split()[0])}\b\W+(?:\S+\W+){{0,3}}?{_LEADS[lang]}", text, re.I):
+            out.append(f"{lead} lead, not {trail}")
     if not re.search(_GOAL[lang], text, re.I):
         out.append("it must say that a goal was scored")
     if re.search(_MISS[lang], head, re.I):

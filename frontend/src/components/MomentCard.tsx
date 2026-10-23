@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { fmtMinute } from "@/lib/format"
 import { ProvenanceDialog } from "@/components/ProvenanceDialog"
-import { ArrowLeftRight, Goal, LayoutGrid, Medal, Send, Info, Target, Timer, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
+import { ArrowLeftRight, Clock, Goal, LayoutGrid, Medal, Send, Info, Target, Timer, TrendingUp, TriangleAlert, UserRound, Users, Wind, Zap, type LucideIcon } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TEAM_COLORS } from "@/lib/theme"
 import type { Overlay } from "@/lib/types"
@@ -12,7 +12,7 @@ const KIND: Record<string, { label: string; Icon: LucideIcon }> = {
   milestone: { label: "Milestone", Icon: Medal }, tactic_report: { label: "Shape", Icon: LayoutGrid }, tactic_shift: { label: "Tactical shift", Icon: ArrowLeftRight },
   role_reveal: { label: "Role", Icon: UserRound }, card: { label: "Card", Icon: TriangleAlert }, substitution: { label: "Substitution", Icon: Users },
   restart_late_throw_in: { label: "Restart Watch", Icon: Timer }, restart_late_goal_kick: { label: "Restart Watch", Icon: Timer },
-  restart_late_keeper_hold: { label: "Restart Watch", Icon: Timer },
+  restart_late_keeper_hold: { label: "Restart Watch", Icon: Timer }, half_time: { label: "Half time", Icon: Clock },
 }
 
 /** Placeholder with the same shape as a moment card, shown until the first moment arrives. */

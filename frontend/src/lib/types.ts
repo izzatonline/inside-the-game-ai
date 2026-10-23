@@ -61,5 +61,6 @@ export type Frames = {
   lastConfirmed: { team: string; idx: number; at: number } | null
   goal: { team: string; at: number } | null
   flag: { team: string; player: string; x: number | null; at: number } | null  // offside: AR flag up
+  half: number; halfAt: number | null  // 2 = second half: the teams have switched ends on the pitch
 }
 export type Selected = { team: number; idx: number } | null

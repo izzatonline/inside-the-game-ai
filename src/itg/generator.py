@@ -374,7 +374,8 @@ def _offside(out, bx: float, carrier) -> None:
         out[i][0] = lim1 + 0.4 + 1.5 * rank
 
 
-_DEAD = {"corner", "penalty", "free_kick", "throw_in", "goal_kick", "kickoff", "keeper_hold", "stoppage"}
+_DEAD = {"corner", "penalty", "free_kick", "throw_in", "goal_kick", "kickoff", "keeper_hold", "stoppage", "goal"}
+HALF_T = 45 * 60.0  # half time: the second half kicks off here and the teams switch ends (see server._frame_chunk)
 _ACCEL = 4.0  # m/s per second
 _WANDER_M = (5.5, 4.0)  # off-ball movement amplitude (x, y), metres
 _PASS_MS = 16.0  # ball speed of a pass or clearance, m/s
@@ -427,7 +428,7 @@ def _motion(keys, vmax, first: str, seed: int):
                 restarts.append((st, team, kind, round(release - st, 1)))
             dead_since = None
         start, ball, rel_pt = [p[:] for p in S], b0, None
-        ts = t0 + 1.0
+        ts = t0 + 1.0 if not t0 < HALF_T <= t1 else t1  # nothing is played across the half-time break
         while ts < t1 - 0.3:
             h = None
             if into_dead:  # the ball goes dead: players walk or jog to the set-piece spots meanwhile
@@ -493,7 +494,7 @@ def _motion(keys, vmax, first: str, seed: int):
                                           "pos": [pu(p) for p in S], "ball": pu(ball), "poss": poss,
                                           "holder": hold, "conf": round(conf, 2), "phase": ph}))
             ts += 1.0
-        if m1["phase"] in _DEAD or t1 - t0 > 30:  # set pieces and kick-offs keep their exact shape
+        if m1["phase"] in _DEAD or t1 - t0 > 30 or t0 < HALF_T <= t1:  # set pieces and kick-offs keep their shape
             S, V = [xy(p) for p in m1["pos"]], [[0.0, 0.0] for _ in range(22)]
         else:  # open play: the snapshot shows where the simulated players really are
             if h1 is not None:
@@ -798,7 +799,20 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         emit(t_, "tracking", poss_, "", x_, y_, pos=pos, ball=[round(bx, 1), round(by, 1)], poss=poss_,
              holder=holder, conf=round(conf, 2), phase=ph, phase_conf=phc)
 
+    def net(t_, team_, ph="goal"):
+        """The ball in the net, a moment after the scoring shot: same players, ball between the posts."""
+        if not tracking:
+            return
+        last = next(e for e in reversed(events) if e.type == "tracking")
+        m = {**last.meta, "pos": [p[:] for p in last.meta["pos"]]}
+        gx_ = 101.2 if team_ == codes[0] else -1.2  # 1.3 m behind the goal line
+        m.update(ball=[gx_, round(_clamp(50 + (m["ball"][1] - 50) * 0.35, 46.5, 53.5), 1)],
+                 holder=None, conf=0.0, phase=ph, phase_conf=1.0, poss=team_)
+        rx = gx_ if team_ == codes[0] else 100 - gx_
+        emit(t_, "tracking", team_, "", rx, 50, **m)
+
     t, poss, x, y, pressured = 0.0, codes[0], 50.0, 50.0, False
+    second_half = False
     carries: List[Tuple[Event, int]] = []  # (carry event, player index in the frame) to time from tracking
     score = {c: 0 for c in codes}
     emit(0, "kickoff", poss, pick(poss, 50), 50, 50)
@@ -814,6 +828,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             score[att] += 1
             emit(tt, "own_goal", att, item["culprit"], 90, 50, score=dict(score), against=other[att])
             track(tt, att, 90, 50)
+            net(tt + 0.6, att)
             if item.get("var"):
                 emit(tt + 2, "var", att, item["culprit"], 90, 50, kind="goal_check")
                 emit(tt + 40, "var", att, item["culprit"], 90, 50, kind="goal_stands")
@@ -833,6 +848,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             emit(tt, "shot", att, item["scorer"], 88, 50, "goal" if kind == "goal" else "disallowed", xg=item["xg"],
                  speed_kmh=item.get("speed", 90), distance_m=11.0, score=dict(score))
             track(tt, att, 88, 50, taker=item["scorer"])
+            net(tt + 0.6, att, "goal" if kind == "goal" else "stoppage")  # a disallowed goal waits for VAR
             if kind == "goal":
                 poss, x, y = other[att], 50.0, 50.0
                 emit(tt + 40, "kickoff", poss, pick(poss, 50), 50, 50)
@@ -856,7 +872,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
             score[att] += 1
             emit(tt + 95, "shot", att, item["taker"], 88, 50, "goal", xg=0.76, speed_kmh=96, distance_m=11.0,
                  penalty=True, score=dict(score))
-            track(tt + 96, att, 88, 50, taker=item["taker"])
+            track(tt + 95, att, 88, 50, taker=item["taker"])
+            net(tt + 95.6, att)
             poss, x, y = other[att], 50.0, 50.0
             emit(tt + 135, "kickoff", poss, pick(poss, 50), 50, 50)
             t = tt + 135
@@ -869,6 +886,12 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         t += rng.uniform(3, 8)
         if t >= duration:
             break
+        if not second_half and t >= HALF_T:  # half time: the other side kicks off the second half
+            second_half = True
+            emit(HALF_T - 0.1, "halftime", poss, "", 50, 50, score=dict(score))  # 45', the last moment of the first half
+            poss, x, y, pressured = codes[1], 50.0, 50.0, False
+            emit(HALF_T, "kickoff", poss, at_ball(HALF_T, poss, 50, 50)[0], 50, 50, half=2)
+            track(HALF_T, poss, x, y, "kickoff")
         while plan and plan[0][0] <= t:
             when, kind, c, slot, idx = plan.pop(0)
             sub_name, sub_pos, number = teams[c]["staff"]["subs"][idx]
@@ -892,6 +915,7 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
         # Names come from the positions of that moment (pick() still runs so the random stream, and with it the
         # match, stays the same as before).
         if x >= 72 and rng.random() < (scen.get("shot_rate", 0.09) if scen else 0.09):
+            x, y = min(x, 93.0), 50 + (y - 50) * (0.45 if abs(y - 50) > 18 else 1.0)  # wide players cut inside to shoot
             pick(poss, x)
             shooter = at_ball(t, poss, x, y)[0]
             dist = math.hypot((100 - x) * 1.05, (y - 50) * 0.68)
@@ -906,6 +930,8 @@ def generate_match(seed: int = 7, duration: Optional[float] = None, tracking: bo
                  distance_m=round(dist, 1), score=dict(score))
             shooter_team, poss, pressured = poss, opp, False
             if outcome == "goal":
+                track(t, shooter_team, x, y, taker=shooter)
+                net(t + 0.6, shooter_team)
                 x = y = 50.0
                 emit(t + 40, "kickoff", poss, pick(poss, 50), 50, 50)
                 t += 40

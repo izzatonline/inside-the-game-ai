@@ -23,7 +23,7 @@ import imageio_ffmpeg
 from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("ITG_BASE", "http://localhost:8000")
-M = "/?match=redcrest&seed=7"
+M = "/?match=riverside&seed=7"
 OUT = pathlib.Path(__file__).resolve().parent.parent / "videos" / "demo"
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 W, H, STRIP = 1440, 900, 64  # app viewport, plus a strip below it for call-outs
@@ -31,8 +31,11 @@ FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 EL_KEY = os.environ.get("ELEVEN_LABS_API_KEY") or os.environ.get("ELEVENLABS_API_KEY")
 EL_VOICE = os.environ.get("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9")  # "Daniel": calm British presenter (stock voice)
 extra_audio = []  # (file, start seconds, clip seconds) for sound the app itself makes, e.g. the spoken recap
-GOAL_CARD = "Falk Fires Home"  # the goal shown on camera (its AI headline was checked by eye)
-RECAP_CLIP_S = 10.0  # play this much of the spoken recap (it fades out), to stay under two minutes
+GOAL_CARD = "Wolfe nets for Meridian"  # the goal shown on camera: Casper Wolfe, 36:40 (AI headline checked by eye)
+GOAL_START = 36.05  # minutes: a few seconds before that goal
+JUMP_TO = 66.5  # timeline jump: minute 66, just before Wolfe's second at 66:30
+ES_START = 66.6  # Spanish scene: just after that goal
+RECAP_CLIP_S = 5.0  # play this much of the spoken recap (it fades out), to stay under two minutes
 
 
 def goto(pg, q):
@@ -45,7 +48,8 @@ def pause(pg):
 
 
 def intro(pg, t0):
-    goto(pg, "&mode=casual&start=0&speed=2")
+    pg.goto(BASE + "/?match=coastal&seed=7&mode=casual&start=0&speed=2")
+    pg.wait_for_selector("canvas")
     pg.wait_for_timeout(9500)
 
 
@@ -55,60 +59,81 @@ def switch(pg, t0):
 
 
 def pitch(pg, t0):
-    goto(pg, "&mode=casual&start=81.0&speed=5")  # RED's Falk scores at 81:40
-    pg.wait_for_timeout(1500)
-    pg.locator('button[aria-label="3D view"]:visible').first.click()  # to 2D, where roles and lines are easiest to read
-    pg.wait_for_timeout(8500)
+    goto(pg, f"&mode=casual&start={GOAL_START}&speed=5&view=2d")  # a few seconds before the goal on camera
+    pg.wait_for_timeout(9000)
 
 
 def goal(pg, t0):
     pg.locator("li", has_text=GOAL_CARD).first.wait_for(timeout=30000)
-    pg.wait_for_timeout(1200)
+    pg.wait_for_timeout(1500)
     pause(pg)
-    pg.wait_for_timeout(4500)
+    pg.wait_for_timeout(4000)
 
 
 def workflow(pg, t0):
     pg.locator("li", has_text=GOAL_CARD).locator('button[aria-label="How this was made"]').first.click()
-    pg.wait_for_timeout(5500)
+    pg.wait_for_timeout(5000)
     pg.get_by_text("Agent workflow").scroll_into_view_if_needed()
-    pg.wait_for_timeout(12000)
+    pg.wait_for_timeout(9000)
     pg.keyboard.press("Escape")
 
 
+def timeline(pg, t0):
+    pg.locator('[aria-label="Show match momentum"]:visible').first.click()
+    pg.wait_for_timeout(2200)
+    chart = pg.locator('[aria-label^="Match momentum by minute"]').first
+    box = chart.bounding_box()
+    jump = pg.get_by_role("button", name=re.compile(r"Jump to \d+")).last
+    frac = JUMP_TO / 99.0
+    for _ in range(4):  # click, read the minute it picked, nudge until it is the one we want
+        pg.mouse.click(box["x"] + box["width"] * frac, box["y"] + box["height"] * 0.5)
+        pg.wait_for_timeout(350)
+        got = int(re.search(r"(\d+)", jump.inner_text()).group(1))
+        if got == int(JUMP_TO):
+            break
+        frac += (int(JUMP_TO) - got + 0.5) / 105.0
+    pg.wait_for_timeout(900)
+    jump.click()
+    pg.wait_for_timeout(1000)
+    play = pg.locator('button[aria-label="Play match"]:visible')
+    if play.count():
+        play.first.click()
+    pg.wait_for_timeout(10000)  # long enough to see the goal go in
+
+
 def viewer(pg, t0):
-    goto(pg, "&mode=analyst&lang=es&start=60.55&speed=3&view=2d")  # just after RED's 60:25 penalty: its card is on top
+    goto(pg, f"&mode=analyst&lang=es&start={ES_START}&speed=3&view=2d")  # just after a goal: its Spanish card is on top
     pg.wait_for_timeout(2500)
     pause(pg)
     pg.wait_for_timeout(3500)
 
 
 def tactics(pg, t0):
-    goto(pg, "&mode=analyst&lang=en&start=62&speed=3&view=2d")
+    goto(pg, "&mode=analyst&lang=en&start=70&speed=3&view=2d")
     pg.wait_for_timeout(1500)
     pg.get_by_role("tab", name="Tactics").click()
-    pg.wait_for_timeout(5500)
+    pg.wait_for_timeout(5000)
 
 
 def restart_watch(pg, t0):
     pg.get_by_role("tab", name="Stats").click()
     pg.wait_for_timeout(800)
     pg.get_by_text("Restart Watch").first.scroll_into_view_if_needed()
-    pg.wait_for_timeout(7000)
+    pg.wait_for_timeout(6500)
 
 
 def players(pg, t0):
     pg.get_by_role("button", name=re.compile("Player stats and compare")).click()
     pg.wait_for_timeout(2500)
     pg.get_by_text("Distance covered").scroll_into_view_if_needed()
-    pg.wait_for_timeout(5000)
+    pg.wait_for_timeout(4500)
     pg.keyboard.press("Escape")
 
 
 def recap(pg, t0):
     goto(pg, "&mode=casual&lang=en&start=98.92&speed=6")
     pg.get_by_text("Full time").first.wait_for(timeout=60000)
-    pg.wait_for_timeout(5000)
+    pg.wait_for_timeout(4500)
     listen = pg.get_by_role("button", name=re.compile("Listen to the recap"))
     if listen.count():
         audio = _recap_audio(listen.first.get_attribute("data-audio"))
@@ -145,14 +170,15 @@ SCENES = [
     ("switch", switch, "Three synthetic matches · switch with one click",
      "Pick any of three synthetic matches, each with its own clubs, colours and storyline."),
     ("pitch", pitch, "22 players tracked every second · formations and roles read from positions",
-     "Twenty-two synthetic players move every second, with real set pieces and offside. "
-     "The app reads each team's formation and player roles from the positions alone."),
+     "Twenty-two synthetic players move every second, with real set pieces, offside and kick-offs. "
+     "The app reads each team's formation and roles from the positions alone."),
     ("goal", goal, "The AI writes the words · code computes every number",
      "When a goal goes in, a model on Microsoft Foundry writes the story, and code computes every number in it."),
     ("workflow", workflow, "Agent Framework: write → fact-check → send back → air",
-     "Tap the label to see how it was made. On Microsoft Agent Framework, an Explainer and a Narrator write, "
-     "a FactChecker checks every number and sends bad drafts back for a rewrite, and an Editor decides how the card airs. "
-     "Across two hundred live cards, not one unchecked number reached the screen."),
+     "On Microsoft Agent Framework, agents write, a FactChecker checks every number and the meaning, "
+     "and sends bad drafts back for a rewrite. Across two hundred live cards, none slipped through."),
+    ("timeline", timeline, "Match timeline: who was on top · jump to any minute",
+     "The timeline shows who was on top, minute by minute. Jump to any moment."),
     ("viewer", viewer, "Analyst mode · Spanish · your club, your player",
      "Every viewer gets their own version: casual or analyst, any club or player, and their own language. Here, in Spanish."),
     ("tactics", tactics, "Tactics agent: shape, pressing, how to respond",

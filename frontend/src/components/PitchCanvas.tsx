@@ -79,6 +79,44 @@ export function PitchCanvas(props: Props) {
       g.strokeRect(X(100) - M(16.5), Y(50) - bh / 2, M(16.5), bh); g.strokeRect(X(100) - M(5.5), Y(50) - sh / 2, M(5.5), sh)
       g.strokeStyle = "rgba(255,255,255,.92)"; g.lineWidth = 2.2; g.strokeRect(mg, mg, pw, ph)  // the boundary lines
       flag2D(X(0), Y(0), 1, 1); flag2D(X(100), Y(0), -1, 1); flag2D(X(0), Y(100), 1, -1); flag2D(X(100), Y(100), -1, -1)
+      goal2D(0, null); goal2D(1, null)
+    }
+
+    // A goal behind each goal line: 7.32 m between the posts, 2 m of net. `flash` fills the net after a goal.
+    const goal2D = (end: number, flash: string | null) => {
+      const gh = (ph * 7.32) / 68, d = M(2), x = end ? X(100) : X(0) - d, y = Y(50) - gh / 2
+      g.save()
+      g.fillStyle = flash ?? "rgba(255,255,255,.10)"; g.fillRect(x, y, d, gh)
+      g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 0.6
+      for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(x, y + (gh * i) / 4); g.lineTo(x + d, y + (gh * i) / 4); g.stroke() }
+      g.strokeStyle = "#ffffff"; g.lineWidth = 2.2
+      g.beginPath(); g.moveTo(end ? X(100) : X(0), y); g.lineTo(end ? X(100) + d : X(0) - d, y); g.lineTo(end ? X(100) + d : X(0) - d, y + gh); g.lineTo(end ? X(100) : X(0), y + gh); g.stroke()
+      g.restore()
+    }
+
+    // Big moments drawn on top of the pitch: "GOAL!" in the scorer's colour, and the switch of ends at half time.
+    const banners = (ts: number, fr: Frames, codes: string[], ball: number[] | null, twoD: boolean) => {
+      const now = performance.now()
+      const gt = fr.goal ? now - fr.goal.at : 1e9
+      if (gt < 3500) {
+        const col = TEAM_COLORS[Math.max(0, codes.indexOf(fr.goal!.team))]
+        if (twoD && ball) { const a = 0.35 + 0.35 * Math.abs(Math.sin(ts / 120)); goal2D(ball[0] > 50 ? 1 : 0, col + Math.round(a * 255).toString(16).padStart(2, "0")) }
+        const pop = Math.min(1, gt / 220), fade = gt > 2800 ? 1 - (gt - 2800) / 700 : 1
+        g.save(); g.globalAlpha = fade; g.translate(W / 2, (twoD ? Hp : H) * 0.42); g.scale(0.6 + 0.4 * pop, 0.6 + 0.4 * pop)
+        const fs = Math.round(Math.max(28, W * 0.085))
+        g.font = `900 ${fs}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"
+        g.lineWidth = fs * 0.12; g.strokeStyle = "rgba(4,10,20,.85)"; g.strokeText("GOAL!", 0, 0)
+        g.fillStyle = col; g.fillText("GOAL!", 0, 0); g.restore()
+      }
+      const ht = fr.halfAt ? now - fr.halfAt : 1e9
+      if (ht < 3500) {
+        g.save(); g.globalAlpha = ht > 2800 ? 1 - (ht - 2800) / 700 : 1
+        const y = (twoD ? Hp : H) * 0.12, fs = Math.round(Math.max(12, W * 0.024))
+        g.font = `800 ${fs}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle"
+        const text = "Second half · teams switch ends", w = g.measureText(text).width + fs * 1.6
+        g.fillStyle = "rgba(7,11,20,.88)"; g.beginPath(); g.roundRect(W / 2 - w / 2, y - fs, w, fs * 2, fs); g.fill()
+        g.fillStyle = "#fbbf24"; g.fillText(text, W / 2, y + 1); g.restore()
+      }
     }
 
     const control = (pos: number[][]) => {
@@ -169,11 +207,12 @@ export function PitchCanvas(props: Props) {
     const officials = (cur: number[][], ball: number[], dt: number): Officials => {
       const { codes, frames } = live.current
       const fr = frames.current
-      const dir = fr.poss === codes[1] ? -1 : 1  // team 0 attacks right (+x)
+      const flip = fr.half === 2 ? -1 : 1  // the teams switch ends at half time
+      const dir = (fr.poss === codes[1] ? -1 : 1) * flip  // team 0 attacks right (+x) in the first half
       const dead = isDeadBall(fr.phase)
       // Diagonal system: about 15 m behind play and off to the side of it, never on top of the ball or a player.
       const side = ball[1] < 50 ? 1 : -1  // the infield side of the ball
-      const tx = ball[0] - dir * 14
+      const tx = cl(ball[0] - dir * 14, 15, 85)  // never back by a goal line: stay in the field of play
       const ty = dead ? ball[1] + side * 16 : ball[1] + side * 18 + (50 - ball[1]) * 0.15
       const kr = 1 - Math.exp(-dt * 1.8), ka = 1 - Math.exp(-dt * 3)
       ofc.r[0] += (cl(tx, 4, 96) - ofc.r[0]) * kr; ofc.r[1] += (cl(ty, 6, 94) - ofc.r[1]) * kr
@@ -186,12 +225,13 @@ export function PitchCanvas(props: Props) {
       keepAway(ball, dead ? 10 : 12)
       for (let pass = 0; pass < 2; pass++) for (const p of cur) keepAway(p, 4)
       keepAway(ball, dead ? 10 : 12)
-      const xs0 = cur.slice(0, 11).map((p) => p[0]).sort((a, b) => a - b), xs1 = cur.slice(11).map((p) => p[0]).sort((a, b) => b - a)
-      const lineL = Math.min(xs0[1], 50), lineR = Math.max(xs1[1], 50)  // second-last defender; no offside in your own half
+      const left = flip === 1 ? cur.slice(0, 11) : cur.slice(11), right = flip === 1 ? cur.slice(11) : cur.slice(0, 11)  // who defends which end
+      const xsL = left.map((p) => p[0]).sort((a, b) => a - b), xsR = right.map((p) => p[0]).sort((a, b) => b - a)
+      const lineL = Math.min(xsL[1], 50), lineR = Math.max(xsR[1], 50)  // second-last defender; no offside in your own half
       ofc.a1 += (Math.max(2, lineL) - ofc.a1) * ka; ofc.a2 += (Math.min(98, lineR) - ofc.a2) * ka
-      return { R: [ofc.r[0], ofc.r[1]], A1: [ofc.a1, -1.6], A2: [ofc.a2, 101.6], lineL, lineR, active: fr.poss === codes[1] ? 0 : 1 }
+      return { R: [ofc.r[0], ofc.r[1]], A1: [ofc.a1, -1.6], A2: [ofc.a2, 101.6], lineL, lineR, active: dir === -1 ? 0 : 1 }
     }
-    const lineCol = (i: number) => (i === 0 ? TEAM_COLORS[1] : TEAM_COLORS[0])  // the attackers the line holds back
+    const lineCol = (i: number) => TEAM_COLORS[(i === 0) === (live.current.frames.current.half !== 2) ? 1 : 0]  // the attackers the line holds back
 
     // The dead-ball cue: the touchline stretch for a throw-in, the corner arc for a corner
     const cuePoints = (fr: Frames, ball: number[]): { kind: string; pts: number[][] } | null => {
@@ -513,7 +553,7 @@ export function PitchCanvas(props: Props) {
         curBall[0] += (fr.ball[0] - curBall[0]) * kb; curBall[1] += (fr.ball[1] - curBall[1]) * kb
       }
       const of = cur ? officials(cur, curBall, dt) : null
-      if (live.current.view3d) { draw3D(ts, cur, curBall, of); raf = requestAnimationFrame(draw); return }
+      if (live.current.view3d) { draw3D(ts, cur, curBall, of); banners(ts, fr, live.current.codes, null, false); raf = requestAnimationFrame(draw); return }
       pitch(); drawBench2D(ts)
       if (cur && fr.target) {
         if (layers.includes("control")) { control(cur); g.imageSmoothingEnabled = true; g.drawImage(ctrl, mg, mg, pw, ph) }
@@ -560,7 +600,7 @@ export function PitchCanvas(props: Props) {
           for (const a of [of.A1, of.A2]) token(X(a[0]), Y(a[1]), orr * 0.92, "#facc15", "#111827", "AR", 1, "#111827")
           const fl = fr.flag
           if (fl && ts - fl.at < 3500) {  // offside: the assistant on that half raises the flag for ~3 s
-            const right = fl.team === codes[0]  // team 0 attacks right, so the right-half AR flags them
+            const right = (fl.team === codes[0]) === (fr.half !== 2)  // team 0 attacks right in the first half, left in the second
             const a = right ? of.A2 : of.A1, ax = X(a[0]), ay = Y(a[1]), up = a[1] > 50 ? -1 : 1
             const lx = fl.x ?? (right ? of.lineR : of.lineL)
             g.save(); g.strokeStyle = "#ef4444"; g.lineWidth = 2.5; g.setLineDash([]); g.globalAlpha = 0.9
@@ -578,6 +618,7 @@ export function PitchCanvas(props: Props) {
         g.beginPath(); g.arc(bx, by, brr + 3, 0, 7); g.fillStyle = "rgba(255,255,255,.22)"; g.fill()
         drawBall(bx, by, brr, (curBall[0] + curBall[1]) * 0.12)
         holderMarks(ts, fr, codes, names, (t, n) => heads[t * 11 + n], [bx, by, brr], 12)
+        banners(ts, fr, codes, curBall, true)
       }
       raf = requestAnimationFrame(draw)
     }

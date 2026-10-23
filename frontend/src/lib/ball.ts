@@ -5,14 +5,14 @@ export type BallInfo = { poss: string; holder: [string, number] | null; band: Ba
 
 const PHASE_LABEL: Record<string, string> = {
   goal_kick: "Goal kick", throw_in: "Throw-in", corner: "Corner", free_kick: "Free kick", kickoff: "Kick-off", keeper_hold: "Keeper has it",
-  penalty: "Penalty", stoppage: "Stoppage",
+  penalty: "Penalty", stoppage: "Stoppage", goal: "Goal!",
 }
 export const isDeadBall = (p: string) => ["goal_kick", "throw_in", "corner", "free_kick"].includes(p)
 
 /** Specific label when sure, generic "Set piece" (optionally "likely X") when not. */
 export function phaseLabel(phase: string, band: number): string | null {
   if (phase === "open") return null
-  if (phase === "kickoff" || phase === "keeper_hold" || phase === "stoppage") return PHASE_LABEL[phase]
+  if (phase === "kickoff" || phase === "keeper_hold" || phase === "stoppage" || phase === "goal") return PHASE_LABEL[phase]
   if (band === 2) return PHASE_LABEL[phase] ?? "Set piece"
   if (band === 1) return `Set piece · likely ${(PHASE_LABEL[phase] ?? "restart").toLowerCase()}`
   return "Set piece"

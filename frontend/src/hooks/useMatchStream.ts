@@ -8,7 +8,7 @@ const emptyBench = (cfg: Config): BenchState => Object.fromEntries(Object.keys(c
 const startRoster = (cfg: Config) => Object.fromEntries(Object.entries(cfg.teams).map(([c, t]) => [c, t.players.slice()]))
 
 export function useMatchStream(settings: Settings, runId: number, cfg: Config, start = 0) {
-  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null })
+  const frames = useRef<Frames>({ target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null, half: 1, halfAt: null })
   const latest = useRef(settings)
   latest.current = settings
   const latestStart = useRef(start)
@@ -32,7 +32,7 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
 
   useEffect(() => {
     const s = latest.current
-    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null }
+    frames.current = { target: null, ball: [50, 50], trail: [], n: 0, reset: true, holder: null, band: 0, phase: "open", phaseBand: 2, poss: "", lastConfirmed: null, goal: null, flag: null, half: 1, halfAt: null }
     setBall(null); setSeries([]); setGoals([]); setCards([]); setSubLog([]); setBench(emptyBench(cfg)); setRoster(startRoster(cfg)); setStats(null); setTactics({}); setOverlays([]); setRecap(null); setStatus("Reading shape…"); setToast(null); setPaused(false)
     const player = s.player.split(":")[2] ?? ""
     const q = new URLSearchParams({ start: String(latestStart.current), match: s.match, seed: s.seed, speed: s.speed, lang: s.lang, mode: s.mode, team: s.team, player, metric: s.metric, ai: s.ai })
@@ -45,9 +45,14 @@ export function useMatchStream(settings: Settings, runId: number, cfg: Config, s
     const show = (title: string, body: string, goal: boolean) => { if (live) setToast({ id: ++toastId, title, body, goal }) }
     es.addEventListener("frame", (e) => {
       const f = JSON.parse((e as MessageEvent).data) as {
-        pos: number[][]; ball: number[]; poss: string; holder: [string, number] | null; conf: number; phase: string; phase_conf: number
+        pos: number[][]; ball: number[]; poss: string; holder: [string, number] | null; conf: number; phase: string; phase_conf: number; half?: number
       }
       const fr = frames.current
+      const half = f.half ?? 1
+      if (half !== fr.half) {  // half time: the teams switch ends, so jump instead of gliding everyone across the pitch
+        if (fr.n > 0 && live) fr.halfAt = performance.now()
+        fr.half = half; fr.reset = true; fr.trail = []
+      }
       fr.target = f.pos; fr.ball = f.ball
       fr.n++
       const last = fr.trail[fr.trail.length - 1]

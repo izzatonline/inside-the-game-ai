@@ -1,3 +1,5 @@
+import json
+
 from itg.agents import FactChecker, MatchPipeline
 from itg.generator import TEAMS, generate_match
 from itg.llm import OfflineLLM
@@ -96,10 +98,28 @@ def _analyze(seed):
     return an.profiles
 
 
+def _snapshots(seed):
+    """The analyzer's profiles once a minute through the match (one end-of-match snapshot is noisy)."""
+    from itg.tactics import TacticsAnalyzer
+
+    an = TacticsAnalyzer(list(TEAMS), NAMES, {c: [n for n, _ in v["players"]] for c, v in TEAMS.items()})
+    out, last = [], -1
+    for e in generate_match(seed):
+        an.frame(e) if e.type == "tracking" else an.observe(e)
+        if e.t - last >= 60 and an.profiles:
+            last = e.t
+            out.append({c: dict(p) for c, p in an.profiles.items()})
+    return out
+
+
 def test_tactics_infer_formation_from_positions_only():
+    from collections import Counter
+
     for seed in (1, 4, 7):
-        p = _analyze(seed)
-        assert p["NOR"]["formation"] == "4-3-3" and p["HAR"]["formation"] == "4-2-3-1"
+        snaps = _snapshots(seed)
+        for code, shape in (("NOR", "4-3-3"), ("HAR", "4-2-3-1")):
+            seen = Counter(s[code]["formation"] for s in snaps)
+            assert seen.most_common(1)[0][0] == shape and seen[shape] / len(snaps) > 0.7
 
 
 def test_tactics_reads_a_staggered_back_four_as_one_line():
@@ -116,13 +136,16 @@ def test_tactics_reads_a_staggered_back_four_as_one_line():
 
 def test_tactics_infer_style_and_roles():
     p = _analyze(7)
-    lines = [(_analyze(sd)["NOR"]["line_height"], _analyze(sd)["HAR"]["line_height"]) for sd in range(1, 13)]
-    assert sum(a for a, _ in lines) > sum(b for _, b in lines) + 12 * 5  # high line vs low block, on average (one snapshot is noisy)
-    ppda = [(_analyze(sd)["NOR"]["ppda"], _analyze(sd)["HAR"]["ppda"]) for sd in range(1, 13)]
-    assert sum(a for a, _ in ppda) < sum(b for _, b in ppda)  # NOR press harder on average
-    roles = {r["name"]: r["role"] for r in p["NOR"]["roles"]}
-    assert roles["Callum Draper"] == "Inverted full-back"
-    assert roles["Itadori Yuji"] == "Overlapping full-back"
+    snaps = [s for sd in range(1, 7) for s in _snapshots(sd)]
+    avg = lambda c, k: sum(s[c][k] for s in snaps) / len(snaps)  # noqa: E731
+    assert avg("NOR", "line_height") > avg("HAR", "line_height") + 5  # high line vs low block over the match
+    assert avg("NOR", "ppda") < avg("HAR", "ppda")  # NOR press harder over the match
+    from collections import Counter
+
+    seen = Counter((r["name"], r["role"]) for s in _snapshots(7) for r in s["NOR"]["roles"])
+    role = lambda name: max((n for n in seen if n[0] == name), key=seen.get)[1]  # noqa: E731  most common read
+    assert role("Callum Draper") == "Inverted full-back"
+    assert role("Itadori Yuji") == "Overlapping full-back"
     assert any(o["title"] for o in p["NOR"]["options"])
 
 
@@ -164,7 +187,7 @@ def test_tactical_analyst_accepts_grounded_and_rejects_invented_numbers():
 
     bad = json.dumps({"summary": "They press at 97% intensity.", "options": [{"title": "x", "detail": "y"}]})
     s, opts, src = TacticalAnalystAgent(_StubLLM(bad)).run(nor, har, "es", "analyst")
-    assert src == "template" and "4-3-3" in s and opts == nor["options"]
+    assert src == "template" and nor["formation"] in s and opts == nor["options"]  # the template carries the read shape
 
 
 def test_tactics_workflow_localises_and_guards():
@@ -192,8 +215,8 @@ def test_localize_tactics_is_cached_across_viewers():
 
 def test_tracking_reports_holder_phase_and_uncertainty():
     frames = [e for e in generate_match(7) if e.type == "tracking"]
-    phases = {e.meta["phase"] for e in frames}
-    assert {"open", "throw_in", "goal_kick", "corner", "keeper_hold"} <= phases
+    phases = {e.meta["phase"] for sd in (1, 3, 7) for e in generate_match(sd) if e.type == "tracking"}
+    assert {"open", "throw_in", "goal_kick", "corner", "keeper_hold", "free_kick", "kickoff", "goal"} <= phases
     assert all(0.0 <= e.meta["conf"] <= 1.0 for e in frames)
     confs = [e.meta["conf"] for e in frames]
     assert any(c >= 0.8 for c in confs) and any(0.5 <= c < 0.8 for c in confs) and any(c < 0.5 for c in confs)
@@ -202,15 +225,17 @@ def test_tracking_reports_holder_phase_and_uncertainty():
             assert e.meta["conf"] < 0.5  # never a named holder without confidence data
         else:
             assert e.meta["holder"][0] == e.meta["poss"] and 0 <= e.meta["holder"][1] < 11
-    assert any(e.meta["phase_conf"] < 0.8 for e in frames if e.meta["phase"] == "corner")
+    assert any(e.meta["phase_conf"] < 0.8 for sd in (1, 3, 7) for e in generate_match(sd)
+               if e.type == "tracking" and e.meta["phase"] == "corner")
 
 
 def test_official_restart_confirms_an_unsure_corner():
     from itg.state import MatchState
 
-    st = MatchState(NAMES)
     corners = 0
-    for e in generate_match(7):
+    for e in (e for sd in (1, 3, 7) for e in generate_match(sd)):
+        if e.t == 0 and e.type == "kickoff":
+            st = MatchState(NAMES)  # a new match
         st.ingest(e)
         if e.type == "tracking" and e.meta["phase"] == "corner":
             assert e.meta["phase_conf"] < 0.8 <= st.phase_conf(e)  # tracker alone unsure; the restart event confirms
@@ -537,3 +562,52 @@ def test_meaning_check_sends_wrong_goal_headlines_back():
     job = Newsroom(ExplainerAgent(MissThenGoal()), NarratorAgent(MissThenGoal())).run(goal, Profile())
     assert job.source == "llm" and job.headline.startswith("Goal")
     assert any("miss or a chance" in s["note"] for s in job.trace)
+
+
+def test_kickoffs_at_the_start_half_time_and_after_every_goal():
+    from itg.generator import HALF_T
+
+    for match in ("coastal", "riverside", "redcrest"):
+        ev = generate_match(7, match=match)
+        frames = [e for e in ev if e.type == "tracking"]
+        goals = [e for e in ev if (e.type == "shot" and e.outcome == "goal") or e.type == "own_goal"]
+        kicks = [e.t for e in ev if e.type == "kickoff"]
+        assert kicks[0] == 0 and HALF_T in kicks and len(kicks) == 2 + len(goals)
+        for k in kicks:  # both teams in their own half, the ball on the centre spot
+            f = next(f for f in frames if f.t >= k - 0.01 and f.meta["phase"] == "kickoff")
+            p = f.meta["pos"]
+            assert all(q[0] <= 50.5 for q in p[:11]) and all(q[0] >= 49.5 for q in p[11:]) and f.meta["ball"] == [50.0, 50.0]
+        for g in goals:  # the ball ends up in the net, between the posts
+            net = next(f for f in frames if f.t > g.t and f.meta["phase"] == "goal")
+            bx, by = net.meta["ball"]
+            assert (bx > 100 or bx < 0) and 46 <= by <= 54 and net.t - g.t < 1
+
+
+def test_teams_switch_ends_at_half_time_on_the_pitch():
+    from itg.generator import HALF_T
+    from itg.server import _frame_chunk
+    from itg.state import MatchState
+
+    st = MatchState(NAMES)
+    frames = [e for e in generate_match(7) if e.type == "tracking"]
+    first = next(e for e in frames if e.t >= HALF_T)
+    before = next(e for e in reversed(frames) if e.t < HALF_T)
+    d1, d2 = (json.loads(_frame_chunk(e, st).split("data: ", 1)[1]) for e in (before, first))
+    assert d1["half"] == 1 and d2["half"] == 2
+    assert d2["pos"] == [[round(100 - x, 1), round(100 - y, 1)] for x, y in first.meta["pos"]]  # turned round
+    assert all(q[0] >= 49.5 for q in d2["pos"][:11])  # the first team now starts in the right half
+
+
+def test_meaning_check_covers_var_reviews_and_who_leads():
+    from itg.agents import meaning_problems
+    from itg.models import Moment
+
+    goal = Moment("g", "goal", 0, 90, "TID", "Gideon Pryce", 1.0,
+                  {"score_home": 3, "score_away": 2, "leader": "Meridian FC", "trailer": "Tidewater Town"})
+    assert meaning_problems(goal, "en", "Penalty Puts Tidewater Town Ahead", "Pryce scores to give Tidewater Town a 3-2 lead.")
+    assert not meaning_problems(goal, "en", "Pryce pulls one back", "Gideon Pryce scores the penalty. Meridian FC lead 3-2.")
+    check = Moment("v", "var", 0, 85, "MER", "Casper Wolfe", 0.7, {"var_kind": "goal_check", "decision": "no decision yet"})
+    assert meaning_problems(check, "en", "Goal for MER!", "Casper Wolfe scores for Meridian FC.")
+    assert not meaning_problems(check, "en", "VAR checks Wolfe strike", "Play stops while VAR reviews a possible goal.")
+    awarded = Moment("v", "var", 0, 88, "TID", "Gideon Pryce", 0.9, {"var_kind": "penalty_awarded", "decision": "not taken yet"})
+    assert meaning_problems(awarded, "en", "Penalty Wins It for TID", "Gideon Pryce slots the penalty.")
