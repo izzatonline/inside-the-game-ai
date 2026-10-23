@@ -48,7 +48,7 @@ export function TeamStatsTable({ teams, codes }: { teams: Record<string, TeamSta
   )
 }
 
-// Premier League and PGMOL Competition Guidance Handbook 2026/27. Free kicks and corners have no numeric limit.
+// Premier League and Pro Ref Competition Guidance Handbook 2026/27 (pp. 48-51, 64-67). Free kicks and corners have no numeric limit.
 const RESTARTS: [kind: string, label: string, limit: number][] = [["throw_in", "Throw-ins", 5], ["goal_kick", "Goal kicks", 5], ["keeper_hold", "Keeper holding the ball", 8]]
 
 /** Restart Watch: how long each side takes over timed restarts, against the handbook limits. Reports, never judges. */
@@ -64,7 +64,7 @@ function RestartWatch({ watch, codes }: { watch: Record<string, Record<string, R
   return (
     <section>
       <h4 className="text-muted-foreground mb-1 flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] uppercase"><Timer className="size-3.5" />Restart Watch</h4>
-      <p className="text-muted-foreground mb-2 text-[11px]">Time from the ball going dead to the restart, measured from tracking, against the 2026/27 Premier League handbook limits. Free kicks and corners have no set limit.</p>
+      <p className="text-muted-foreground mb-2 text-[11px]">Time from the ball going dead to the restart, measured from tracking. "Over" means slower than the countdown in the Premier League and Pro Ref Competition Guidance Handbook 2026/27: referees may count 5 s at throw-ins and goal kicks once they judge a delay unfair, and 8 s for a goalkeeper in control. Free kicks and corners have no set limit.</p>
       <div className="space-y-2 text-xs tabular-nums">
         {RESTARTS.map(([kind, label, limit]) => (
           <div key={kind} className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-2">

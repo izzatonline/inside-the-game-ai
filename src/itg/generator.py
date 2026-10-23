@@ -379,7 +379,7 @@ HALF_T = 45 * 60.0  # half time: the second half kicks off here and the teams sw
 _ACCEL = 4.0  # m/s per second
 _WANDER_M = (5.5, 4.0)  # off-ball movement amplitude (x, y), metres
 _PASS_MS = 16.0  # ball speed of a pass or clearance, m/s
-RESTART_LIMITS = {"throw_in": 5.0, "goal_kick": 5.0, "keeper_hold": 8.0}  # PL 2026/27 handbook, seconds
+RESTART_LIMITS = {"throw_in": 5.0, "goal_kick": 5.0, "keeper_hold": 8.0}  # PL and Pro Ref Competition Guidance Handbook 2026/27
 
 
 def _motion(keys, vmax, first: str, seed: int):

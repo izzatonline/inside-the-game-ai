@@ -24,7 +24,7 @@ the other 9% approved after the FactChecker sent them back, 0 template fallbacks
 3.9 s median from moment to verified card.
 Under the hood, synthetic tracking moves 22 players every second with human speed limits, real set pieces and offside; the app infers
 formations and roles from positions alone, measures distance and top speed, and its Restart Watch times throw-ins, goal kicks and
-keeper holds against the Premier League 2026/27 handbook limits.
+keeper holds against the countdowns in the Premier League and Pro Ref Competition Guidance Handbook 2026/27.
 Problem: broadcasters and streamers need trustworthy, localised, per-audience insight in real time, without a human writing each caption.
 
 ## Microsoft and Azure technologies used

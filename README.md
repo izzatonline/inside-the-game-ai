@@ -27,7 +27,7 @@ roles and per-team tactics: players move with their own top speed and accelerati
 respect offside, and take up real set-piece shapes (zonal corners, free-kick walls at 9.15 m, penalties). Event names
 follow the positions (the receiver of a pass is the player the ball reaches). From this tracking the app measures
 distance covered, top speed and fast runs, and **Restart Watch** times throw-ins, goal kicks and keeper holds against
-the Premier League 2026/27 handbook limits (5 s, 5 s, 8 s). `tactics.py` then *infers* from settled open-play positions
+the countdowns in the Premier League and Pro Ref Competition Guidance Handbook 2026/27 (5 s, 5 s, 8 s). `tactics.py` then *infers* from settled open-play positions
 and events alone, with no access to the generator's labels:
 formation (4-3-3, 4-2-3-1), defensive line height, pressing (PPDA-like), width, directness, each player's role
 (inverted / overlapping full-back, inside forward, holding midfielder, ...), and counter-options against the opponent.

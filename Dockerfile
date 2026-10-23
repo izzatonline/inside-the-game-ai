@@ -5,7 +5,8 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir . agent-framework openai azure-identity
+# Pinned to the versions the tests and the live evaluation ran with.
+RUN pip install --no-cache-dir . agent-framework==1.22.0 agent-framework-core==1.22.0 openai==3.35.1 azure-identity==1.26.0
 RUN useradd -m app
 USER app
 EXPOSE 8000

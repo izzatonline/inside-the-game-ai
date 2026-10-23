@@ -164,8 +164,9 @@ class MatchState:
         return {"leader": lead.name, "trailer": trail.name}
 
     def _restart_watch(self, ev: Event) -> List[Moment]:
-        """Restart Watch: how long each throw-in, goal kick and keeper hold took, against the Premier League
-        2026/27 handbook limits (throw-in and goal kick 5 s, keeper 8 s). Neutral: it reports, it does not judge."""
+        """Restart Watch: how long each throw-in, goal kick and keeper hold took, against the countdowns in the
+        Premier League and Pro Ref Competition Guidance Handbook 2026/27 (throw-in and goal kick 5 s once the referee
+        judges a delay unfair, keeper 8 s from full control). Neutral: it reports, it does not judge."""
         kind, secs, limit = ev.meta["kind"], ev.meta["secs"], ev.meta["limit"]
         w = self.restart_watch.setdefault(ev.team, {}).setdefault(kind, {"n": 0, "over": 0, "total": 0.0, "longest": 0.0})
         w["n"] += 1
