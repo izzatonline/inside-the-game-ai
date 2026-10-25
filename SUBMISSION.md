@@ -35,6 +35,8 @@ managed identity / Microsoft Entra ID (no keys stored in the cloud: the app reac
 Log Analytics. Also Python/FastAPI and React.
 
 Live demo: https://itg-app.bravecoast-6297858c.westus3.azurecontainerapps.io (it scales to zero when idle, so the first load can take up to ~40 s).
+Demo video: https://www.youtube.com/watch?v=fjOnWoKb0y0
+Code: https://github.com/izzatonline/inside-the-game-ai
 All data, clubs, players and stadiums are synthetic and fictional.
 
 ## Testing instructions (for judges)

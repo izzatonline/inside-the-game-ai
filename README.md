@@ -7,7 +7,7 @@ Built for the Microsoft x Premier League "Inside the Game" hackathon.
 
 * **Live demo:** https://itg-app.bravecoast-6297858c.westus3.azurecontainerapps.io (it scales to zero when idle, so the
   first load can take up to ~40 s while it wakes up).
-* **Demo video (under 2 minutes):** DEMO_VIDEO_URL
+* **Demo video (under 2 minutes):** https://www.youtube.com/watch?v=fjOnWoKb0y0
 * **Run it locally (no account or key needed):**
 
   ```bash
