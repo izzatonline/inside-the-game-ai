@@ -11,7 +11,7 @@ Built for the Microsoft x Premier League "Inside the Game" hackathon.
 * **Run it locally (no account or key needed):**
 
   ```bash
-  git clone <this repository> inside-the-game && cd inside-the-game
+  git clone https://github.com/izzatonline/inside-the-game-ai.git && cd inside-the-game-ai
   python3 -m venv .venv && . .venv/bin/activate
   pip install --upgrade pip && pip install -e ".[dev]"
   ./run.sh --offline   # then open http://localhost:8000

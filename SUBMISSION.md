@@ -42,7 +42,7 @@ All data, clubs, players and stadiums are synthetic and fictional.
 The project runs locally; no account, login or key is needed (offline mode uses grounded templates for the wording).
 
 ```bash
-git clone <this repository> inside-the-game && cd inside-the-game
+git clone https://github.com/izzatonline/inside-the-game-ai.git && cd inside-the-game-ai
 python3 -m venv .venv && . .venv/bin/activate
 pip install --upgrade pip && pip install -e ".[dev]"
 ./run.sh --offline          # then open http://localhost:8000
