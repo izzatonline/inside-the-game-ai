@@ -77,6 +77,14 @@ VAR_STAGE = {  # where a VAR review stands, in words for the writers
     "penalty_check": "VAR is checking for a possible penalty; no decision yet",
     "penalty_awarded": "VAR has awarded a penalty; it has not been taken yet",
 }
+RESTART_NOTE = {  # what a Restart Watch card is, in words for the writers: a timing report, never a referee decision
+    "throw_in": "a timing report from tracking, not a referee decision: play went on and nothing was awarded; "
+                "the referee may count 5 seconds only once they judge a delay unfair",
+    "goal_kick": "a timing report from tracking, not a referee decision: play went on and nothing was awarded; "
+                 "the referee may count 5 seconds only once they judge a delay unfair",
+    "keeper_hold": "a timing report from tracking, not a referee decision: play went on and nothing was awarded; "
+                   "the goalkeeper limit is 8 seconds from full control",
+}
 RESTART_CONFIRM_S = 10.0  # a restart event confirms frames of the same restart this many seconds after it
 
 
@@ -177,8 +185,10 @@ class MatchState:
         w["over"] += 1
         if secs < limit + 1 or not self._ready("restart:" + ev.team, 600):  # clear cases only, one per 10 minutes
             return []
-        return [self._moment(ev, "restart_late_" + kind, 0.35, None, ev.team, secs=secs, limit=int(limit),
-                             over=w["over"])]
+        m = self._moment(ev, "restart_late_" + kind, 0.35, None, ev.team, secs=secs, limit=int(limit), over=w["over"],
+                         what_this_is=RESTART_NOTE[kind])
+        m.facts.pop("window_min", None)  # no "last 5 minutes" here: it only invites mixing up numbers
+        return [m]
 
     def _physical(self, ev: Event) -> None:
         """Distance covered, top speed and fast runs, measured between consecutive 1-second tracking frames.

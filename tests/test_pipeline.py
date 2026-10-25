@@ -612,3 +612,12 @@ def test_meaning_check_covers_var_reviews_and_who_leads():
     assert not meaning_problems(check, "en", "VAR checks Wolfe strike", "Play stops while VAR reviews a possible goal.")
     awarded = Moment("v", "var", 0, 88, "TID", "Gideon Pryce", 0.9, {"var_kind": "penalty_awarded", "decision": "not taken yet"})
     assert meaning_problems(awarded, "en", "Penalty Wins It for TID", "Gideon Pryce slots the penalty.")
+
+
+def test_restart_watch_cards_never_claim_a_decision():
+    from itg.agents import meaning_problems
+    from itg.models import Moment
+
+    m = Moment("r", "restart_late_goal_kick", 0, 28, "TID", None, 0.35, {"secs": 7.9, "limit": 5, "over": 1})
+    assert meaning_problems(m, "en", "Tidewater Town awarded late kick", "Restart given at 28' after the window.")
+    assert not meaning_problems(m, "en", "Slow goal kick from Tidewater", "Tidewater took 7.9 s to restart; the referee may count 5 s.")

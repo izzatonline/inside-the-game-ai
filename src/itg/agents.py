@@ -54,6 +54,10 @@ _REVIEW = {"en": r"\b(var|check\w*|review\w*)\b", "es": r"\b(var|revisi[oó]n|re
            "fr": r"\b(var|vérif\w*|examen)\b", "pt": r"\b(var|revis\w*)\b"}
 _LEADS = {"en": r"(ahead|lead(s|ing)?|in front)", "es": r"(ventaja|delante|lidera\w*|adelanta\w*)",
           "ms": r"(mendahului|di hadapan)", "fr": r"(devant|mène|en tête)", "pt": r"(frente|lidera\w*|vantagem)"}
+_AWARDED = {"en": r"\b(award\w*|given|gives|reversed|penali[sz]\w*|punish\w*|sanction\w*|book\w*|yellow|corner)\b",
+            "es": r"\b(conced\w*|otorg\w*|revert\w*|sancion\w*|castig\w*|amarilla|c[oó]rner)\b",
+            "ms": r"\b(diberi|dihukum|kad|sepakan sudut)\b", "fr": r"\b(accord\w*|sanction\w*|jaune|corner)\b",
+            "pt": r"\b(concedid\w*|puni\w*|amarelo|escanteio)\b"}
 _OWN = {"en": r"own goal|own net", "es": r"autogol|en propia", "ms": r"gol sendiri", "fr": r"contre son camp", "pt": r"gol contra|autogolo"}
 
 
@@ -63,6 +67,8 @@ def meaning_problems(m: Moment, lang: str, headline: str, body: str) -> List[str
     words = re.findall(r"\w+", headline.lower())
     if words and max(words.count(w) for w in words) >= 3:
         return ["the headline repeats the same word; write a real headline"]
+    if lang in _GOAL and m.kind.startswith("restart_late_") and re.search(_AWARDED[lang], f"{headline} {body}", re.I):
+        return ["it says the referee awarded or punished something, but this is only a timing report: nothing was awarded"]
     if lang not in _GOAL or m.kind not in ("goal", "var"):
         return []
     text, head, out = f"{headline} {body}", headline, []
