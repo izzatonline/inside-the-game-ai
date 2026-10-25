@@ -501,6 +501,7 @@ def _first_goal(seed=3):
 
 
 def test_factchecker_sends_drafts_back_and_the_fixed_draft_airs():
+    __import__("pytest").importorskip("agent_framework")  # compares the plain path with the Agent Framework workflow
     from itg.agents import ExplainerAgent, NarratorAgent, Newsroom
     from itg.demo import HallucinatingLLM, LearningLLM
     from itg.maf import MafRunner

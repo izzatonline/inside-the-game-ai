@@ -1,7 +1,27 @@
 # Inside the Game
 
 Synthetic football events -> explainable, personalised match intelligence.
-Built for the Microsoft x Premier League "Inside the Game" hackathon (deadline 2026-10-27, 11:59 PM PT).
+Built for the Microsoft x Premier League "Inside the Game" hackathon.
+
+## Try it
+
+* **Live demo:** https://itg-app.bravecoast-6297858c.westus3.azurecontainerapps.io (it scales to zero when idle, so the
+  first load can take up to ~40 s while it wakes up).
+* **Demo video (under 2 minutes):** DEMO_VIDEO_URL
+* **Run it locally (no account or key needed):**
+
+  ```bash
+  git clone <this repository> inside-the-game && cd inside-the-game
+  python3 -m venv .venv && . .venv/bin/activate
+  pip install --upgrade pip && pip install -e ".[dev]"
+  ./run.sh --offline   # then open http://localhost:8000
+  ```
+
+* **Measured on 202 live AI cards** (gpt-5-mini on Microsoft Foundry, English/Spanish/French, [`docs/evaluation.md`](docs/evaluation.md)):
+  91% approved by the FactChecker first time, the other 9% after it sent them back for a rewrite, 0 template fallbacks,
+  0 numbers aired that were not in the facts, 0 goal cards aired with a wrong meaning, 3.9 s median from moment to card.
+
+All matches, clubs, players and stadiums are synthetic and fictional.
 
 Pipeline (maps 1:1 to the rules' five stages):
 
@@ -10,12 +30,14 @@ Pipeline (maps 1:1 to the rules' five stages):
 | Ingest | `generator.py` (seeded synthetic match, JSONL export) |
 | Interpret | `state.py` (rolling stats, pressure share/momentum, moment detection) |
 | Explain | `agents.ExplainerAgent` (why it matters: momentum, control vs chaos) |
-| Render | `server.py` SSE + `web/index.html` overlay |
+| Render | `server.py` timed JSON overlays over SSE + the React pitch and timeline in `frontend/` |
 | Personalize | `agents.PersonalizerAgent` (mode, language, club, player focus, metric) |
 
-Guardrail and review loop: the `FactChecker` checks every number in the AI's text against the moment's facts. A draft
-with an unknown number goes back to the agent that wrote it (Explainer or Narrator) with those numbers listed, for up to
-two rewrites; only then does that part fall back to a grounded template. A failed model call is retried once. The
+Guardrail and review loop: the `FactChecker` checks every number in the AI's text against the moment's facts, and checks
+the meaning of goal and VAR cards (a goal reads as a goal, "level" only when level, the leading team is named correctly,
+own goals name the right team, a VAR check never claims a goal). A draft that fails goes back to the agent that wrote it
+(Explainer or Narrator) with the problems listed, for up to two rewrites; only then does that part fall back to a
+grounded template. A failed model call is retried once. The
 `Editor` decides how the approved card airs (screen slot, priority, time on screen). Every step is recorded and shown
 in the card's "How this was made" panel.
 With no Azure config the whole app runs offline (templates in en/es/ms).
@@ -43,7 +65,7 @@ flowchart LR
   P --> W
   subgraph W[Agent Framework workflow]
     E[Explainer] --> N[Narrator] --> F[FactChecker]
-    F -->|rejected: numbers not in facts| E
+    F -->|rejected: a number or the meaning is wrong| E
     F -->|approved| D[Editor]
   end
   W -->|timed JSON overlays, SSE| U[Web overlay UI / broadcast renderer]
@@ -64,13 +86,21 @@ npm run dev                                                         # hot reload
 
 ## Run
 
-Python 3.11 (uv is installed in `.venv`; the 3.11 env is `.venv311`):
+Python 3.9+ for the offline app; 3.10+ for model narration through Agent Framework (3.11 used in development):
 
 ```bash
-PYTHONPATH=src .venv311/bin/uvicorn itg.server:app --port 8000   # open http://localhost:8000
-.venv311/bin/python -m pytest -q
-PYTHONPATH=src .venv311/bin/python -m itg.generator --seed 7 --out data/match_7.jsonl
+python3 -m venv .venv && . .venv/bin/activate
+pip install --upgrade pip && pip install -e ".[dev]"   # an old pip cannot install this project in editable mode
+./run.sh --offline                       # grounded template wording, no model; open http://localhost:8000
+pip install -e ".[azure,agents]"         # optional: model narration through Agent Framework
+cp .env.example .env                     # fill in your Foundry / Azure OpenAI deployment, then ./run.sh
+python -m pytest -q
+PYTHONPATH=src python -m itg.generator --seed 7 --out data/match_7.jsonl   # raw synthetic events as JSONL
 ```
+
+URL parameters: `match` (coastal, riverside, redcrest), `seed`, `speed`, `mode` (casual, analyst), `lang`, `view=2d`,
+`ai=0`, `start=<minute>`. The stream keeps one orientation in the data (first team attacks +x); the pitch view turns
+second-half frames round so the teams switch ends.
 
 ## Microsoft Agent Framework + Foundry
 

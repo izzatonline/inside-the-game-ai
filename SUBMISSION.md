@@ -34,7 +34,7 @@ Azure Container Apps (live demo, scales to zero), Azure Container Registry, Azur
 managed identity / Microsoft Entra ID (no keys stored in the cloud: the app reaches the model and Speech through its identity),
 Log Analytics. Also Python/FastAPI and React.
 
-Live demo: https://itg-app.bravecoast-6297858c.westus3.azurecontainerapps.io (the first load can take ~20 s while it wakes up).
+Live demo: https://itg-app.bravecoast-6297858c.westus3.azurecontainerapps.io (it scales to zero when idle, so the first load can take up to ~40 s).
 All data, clubs, players and stadiums are synthetic and fictional.
 
 ## Testing instructions (for judges)
@@ -42,12 +42,15 @@ All data, clubs, players and stadiums are synthetic and fictional.
 The project runs locally; no account, login or key is needed (offline mode uses grounded templates for the wording).
 
 ```bash
-git clone <this repository> && cd insidethegame
-python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
+git clone <this repository> inside-the-game && cd inside-the-game
+python3 -m venv .venv && . .venv/bin/activate
+pip install --upgrade pip && pip install -e ".[dev]"
 ./run.sh --offline          # then open http://localhost:8000
 ```
 
-Things to try: pick a match in the sidebar (Redcrest Rain Night has a scripted storyline), switch Casual/Analyst, language, favourite club or player in
-the gear menu, tap a player in Line-ups for the radar and compare view, tap a moment's label to see how it was made, and drag the timeline to jump to a minute.
+Things to try: pick a match in the sidebar (Riverside Cup Tie and Redcrest Rain Night have scripted storylines with VAR and penalties),
+switch Casual/Analyst, language, favourite club or player in the gear menu, tap a moment's label to see how it was made (each agent step),
+tap the score to open the match timeline and jump to any minute, open Stats for Restart Watch and the player radar with distance and top speed,
+toggle 2D/3D and the offside line, and watch the full-time recap (with a spoken version when Azure AI Speech is configured).
 To use a model, copy `.env.example` to `.env` and fill in an Azure OpenAI / Foundry deployment, then run `./run.sh`.
 The Agent Framework workflow needs Python 3.10+ (`pip install agent-framework`); without it the same agents run as plain Python.
